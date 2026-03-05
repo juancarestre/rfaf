@@ -11,6 +11,28 @@ interface WordDisplayProps {
   renderMode?: "normal" | "expanded";
 }
 
+const MAX_EXPANDED_RENDER_CHARS = 256;
+
+function spreadUppercase(value: string): string {
+  const upper = value.toUpperCase();
+  let output = "";
+
+  for (let index = 0; index < upper.length; index++) {
+    if (index > 0) output += " ";
+    output += upper[index];
+  }
+
+  return output;
+}
+
+function truncateExpandedRenderWord(value: string): string {
+  if (value.length <= MAX_EXPANDED_RENDER_CHARS) {
+    return value;
+  }
+
+  return `${value.slice(0, MAX_EXPANDED_RENDER_CHARS - 3)}...`;
+}
+
 export interface WordDisplayLayout {
   before: string;
   pivot: string;
@@ -36,15 +58,15 @@ export function getWordDisplayLayout(
   renderMode: "normal" | "expanded" = "normal"
 ): WordDisplayLayout {
   const safeWord = sanitizeTerminalText(word || "");
-  const rawOrp = getORPIndex(safeWord.length);
-  const orp = safeWord.length > 0 ? Math.min(rawOrp, safeWord.length - 1) : 0;
+  const displayWord =
+    renderMode === "expanded" ? truncateExpandedRenderWord(safeWord) : safeWord;
+  const rawOrp = getORPIndex(displayWord.length);
+  const orp = displayWord.length > 0 ? Math.min(rawOrp, displayWord.length - 1) : 0;
 
   if (renderMode === "expanded") {
-    const spread = (value: string) => value.split("").join(" ");
-
-    const beforeExpanded = spread(safeWord.slice(0, orp).toUpperCase());
-    const pivotExpanded = (safeWord[orp] ?? "").toUpperCase();
-    const afterExpanded = spread(safeWord.slice(orp + 1).toUpperCase());
+    const beforeExpanded = spreadUppercase(displayWord.slice(0, orp));
+    const pivotExpanded = (displayWord[orp] ?? "").toUpperCase();
+    const afterExpanded = spreadUppercase(displayWord.slice(orp + 1));
 
     const before = beforeExpanded ? `${beforeExpanded} ` : "";
     const after = afterExpanded ? ` ${afterExpanded}` : "";
@@ -58,9 +80,9 @@ export function getWordDisplayLayout(
   }
 
   return {
-    before: safeWord.slice(0, orp),
-    pivot: safeWord[orp] ?? "",
-    after: safeWord.slice(orp + 1),
+    before: displayWord.slice(0, orp),
+    pivot: displayWord[orp] ?? "",
+    after: displayWord.slice(orp + 1),
     leftPadding: " ".repeat(Math.max(0, pivotColumn - orp)),
   };
 }
@@ -83,10 +105,7 @@ export function WordDisplay({
   const pivotStyle = getPivotStyle(noColor);
 
   return (
-    <Box flexDirection="column">
-      {Array.from({ length: topPaddingLines }, (_, index) => (
-        <Text key={`top-pad-${index}`}> </Text>
-      ))}
+    <Box flexDirection="column" paddingTop={topPaddingLines} paddingBottom={bottomPaddingLines}>
       {showGuide ? (
         <Text dimColor>{`${leftPadding}▼`}</Text>
       ) : null}
@@ -96,9 +115,6 @@ export function WordDisplay({
         <Text {...pivotStyle}>{pivot}</Text>
         <Text bold>{after}</Text>
       </Text>
-      {Array.from({ length: bottomPaddingLines }, (_, index) => (
-        <Text key={`bottom-pad-${index}`}> </Text>
-      ))}
     </Box>
   );
 }

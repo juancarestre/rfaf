@@ -40,4 +40,13 @@ describe("WordDisplay layout", () => {
     expect(layout.after).toBe(" L L O");
     expect(layout.leftPadding.length + layout.before.length).toBe(12);
   });
+
+  it("caps expanded rendering for oversized words", () => {
+    const oversized = "a".repeat(400);
+    const layout = getWordDisplayLayout(oversized, 12, "expanded");
+    const renderedWord = layout.before + layout.pivot + layout.after;
+
+    expect(renderedWord).toContain(". . .");
+    expect(renderedWord.length).toBeLessThan(520);
+  });
 });

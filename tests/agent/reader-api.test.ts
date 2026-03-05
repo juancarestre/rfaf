@@ -40,8 +40,14 @@ describe("agent reader api", () => {
     expect(state.mode).toBe("paused");
     expect(state.currentIndex).toBe(0);
     expect(state.currentWpm).toBe(300);
+    expect(state.textScale).toBe("normal");
     expect(state.totalWords).toBe(3);
     expect(state.progress).toBe(0);
+  });
+
+  it("supports runtime text-scale configuration", () => {
+    const runtime = createAgentReaderRuntime(words(), 300, "large");
+    expect(getAgentReaderState(runtime).textScale).toBe("large");
   });
 
   it("supports play/pause and stepping commands", () => {
@@ -73,5 +79,16 @@ describe("agent reader api", () => {
 
     runtime = executeAgentCommand(runtime, { type: "set_wpm_delta", delta: -2_000 }, 0);
     expect(getAgentReaderState(runtime).currentWpm).toBe(50);
+  });
+
+  it("supports setting text-scale through agent command", () => {
+    let runtime = createAgentReaderRuntime(words(), 300);
+    runtime = executeAgentCommand(runtime, {
+      type: "set_text_scale",
+      textScale: "small",
+    });
+
+    const state = getAgentReaderState(runtime);
+    expect(state.textScale).toBe("small");
   });
 });

@@ -53,4 +53,18 @@ describe("text-scale CLI contract", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stderr).not.toContain("Invalid --text-scale value");
   });
+
+  it("prints help exactly once without stderr noise", () => {
+    const result = runCli(["--help"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout.match(/rfaf \[file\] \[options\]/g)?.length ?? 0).toBe(1);
+  });
+
+  it("prints version without additional help output", () => {
+    const result = runCli(["--version"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout.trim()).toBe("0.1.0");
+  });
 });

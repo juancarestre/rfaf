@@ -135,6 +135,10 @@ async function main() {
   const wpm = parseWpm(argv.wpm);
   const textScale = resolveTextScale(argv.textScale);
 
+  if (argv.help || argv.version) {
+    return;
+  }
+
   const source = resolveInputSource({
     fileArg,
     stdinIsPiped: isStdinPiped(),
@@ -199,7 +203,6 @@ main().catch((error: unknown) => {
 
   if (
     message.includes("--wpm") ||
-    message.includes("--text-scale") ||
     message.includes("text-scale")
   ) {
     process.exit(2);

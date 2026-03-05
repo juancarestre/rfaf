@@ -1,4 +1,8 @@
 import {
+  DEFAULT_TEXT_SCALE,
+  type TextScalePreset,
+} from "../cli/text-scale-option";
+import {
   adjustWpm,
   createReader,
   jumpToNextParagraph,
@@ -21,6 +25,7 @@ import type { Word } from "../processor/types";
 export interface AgentReaderRuntime {
   reader: Reader;
   session: Session;
+  textScale: TextScalePreset;
 }
 
 export type AgentReaderCommand =
@@ -30,6 +35,7 @@ export type AgentReaderCommand =
   | { type: "jump_next_paragraph" }
   | { type: "jump_prev_paragraph" }
   | { type: "set_wpm_delta"; delta: number }
+  | { type: "set_text_scale"; textScale: TextScalePreset }
   | { type: "restart" };
 
 export interface AgentReaderState {
@@ -37,6 +43,7 @@ export interface AgentReaderState {
   currentIndex: number;
   currentWord: string;
   currentWpm: number;
+  textScale: TextScalePreset;
   totalWords: number;
   progress: number;
   wordsRead: number;
@@ -77,11 +84,13 @@ function syncSession(
 
 export function createAgentReaderRuntime(
   words: Word[],
-  initialWpm = 300
+  initialWpm = 300,
+  textScale: TextScalePreset = DEFAULT_TEXT_SCALE
 ): AgentReaderRuntime {
   return {
     reader: createReader(words, initialWpm),
     session: createSession(initialWpm),
+    textScale,
   };
 }
 
@@ -111,11 +120,17 @@ export function executeAgentCommand(
     case "set_wpm_delta":
       nextReader = adjustWpm(runtime.reader, command.delta);
       break;
+    case "set_text_scale":
+      return {
+        ...runtime,
+        textScale: command.textScale,
+      };
     case "restart":
       nextReader = restartReader(runtime.reader);
       return {
         reader: nextReader,
         session: createSession(nextReader.currentWpm),
+        textScale: runtime.textScale,
       };
     default: {
       const unreachable: never = command;
@@ -126,6 +141,7 @@ export function executeAgentCommand(
   return {
     reader: nextReader,
     session: syncSession(runtime.reader, runtime.session, nextReader, nowMs),
+    textScale: runtime.textScale,
   };
 }
 
@@ -139,6 +155,7 @@ export function getAgentReaderState(runtime: AgentReaderRuntime): AgentReaderSta
     currentIndex: reader.currentIndex,
     currentWord: reader.words[reader.currentIndex]?.text ?? "",
     currentWpm: reader.currentWpm,
+    textScale: runtime.textScale,
     totalWords,
     progress,
     wordsRead: session.wordsRead,

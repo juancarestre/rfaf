@@ -36,12 +36,14 @@ interface RSVPScreenProps {
 }
 
 export function getReadingLaneLayout(_: TextScalePreset): {
+  flexDirection: "column";
   justifyContent: "center";
-  alignItems: "center";
+  alignItems: "flex-start";
 } {
   return {
+    flexDirection: "column",
     justifyContent: "center",
-    alignItems: "center",
+    alignItems: "flex-start",
   };
 }
 
@@ -268,6 +270,7 @@ export function RSVPScreen({
         <>
           <Box
             flexGrow={1}
+            flexDirection={readingLaneLayout.flexDirection}
             justifyContent={readingLaneLayout.justifyContent}
             alignItems={readingLaneLayout.alignItems}
           >
