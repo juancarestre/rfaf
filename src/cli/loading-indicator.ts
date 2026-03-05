@@ -67,6 +67,13 @@ export function createLoadingIndicator(options: LoadingIndicatorOptions): Loadin
     },
 
     succeed: (message?: string) => {
+      if (active) {
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+        active = false;
+      }
       const safe = sanitizeTerminalText(message ?? "Summary ready.");
       if (stream.isTTY) {
         clearFrame();
@@ -75,6 +82,13 @@ export function createLoadingIndicator(options: LoadingIndicatorOptions): Loadin
     },
 
     fail: (message?: string) => {
+      if (active) {
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+        active = false;
+      }
       const safe = sanitizeTerminalText(message ?? "Summarization failed.");
       if (stream.isTTY) {
         clearFrame();

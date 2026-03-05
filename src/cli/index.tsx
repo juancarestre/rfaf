@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { render } from "ink";
-import { closeSync, existsSync, fstatSync, openSync } from "node:fs";
+import { closeSync, fstatSync, openSync } from "node:fs";
 import { ReadStream } from "node:tty";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
@@ -9,10 +9,10 @@ import { readPlaintextFile } from "../ingest/plaintext";
 import { isStdinPiped, resolveInputSource } from "../ingest/detect";
 import { readStdin } from "../ingest/stdin";
 import { tokenize } from "../processor/tokenizer";
+import { sanitizeTerminalText } from "../ui/sanitize-terminal-text";
 import { App } from "../ui/App";
 import { SummarizeRuntimeError, UsageError } from "./errors";
 import { runSessionLifecycle } from "./session-lifecycle";
-import { summarizeBeforeRsvp } from "./summarize-flow";
 import {
   resolveSummaryOption,
   SUMMARY_PRESETS,
@@ -132,13 +132,7 @@ function normalizeSummaryArgs(rawArgs: string[]): string[] {
       continue;
     }
 
-    if (existsSync(next)) {
-      normalized.push("--summary=");
-      continue;
-    }
-
-    normalized.push(`--summary=${next}`);
-    index += 1;
+    normalized.push("--summary=");
   }
 
   return normalized;
@@ -242,11 +236,19 @@ async function main() {
     process.stderr.write(`${pendingWarning}\n`);
   }
 
-  const summaryResult = await summarizeBeforeRsvp({
-    documentContent: document.content,
-    sourceLabel: document.source,
-    summaryOption,
-  });
+  const summaryResult = summaryOption.enabled
+    ? await (async () => {
+        const { summarizeBeforeRsvp } = await import("./summarize-flow");
+        return summarizeBeforeRsvp({
+          documentContent: document.content,
+          sourceLabel: document.source,
+          summaryOption,
+        });
+      })()
+    : {
+        readingContent: document.content,
+        sourceLabel: document.source,
+      };
 
   const readingContent = summaryResult.readingContent;
   const sourceLabel = summaryResult.sourceLabel;
@@ -283,17 +285,18 @@ main().catch((error: unknown) => {
     message,
     process.env as Record<string, string | undefined>
   );
-  process.stderr.write(`${safeMessage}\n`);
+  const renderedMessage = sanitizeTerminalText(safeMessage);
+  process.stderr.write(`${renderedMessage}\n`);
 
   if (error instanceof UsageError) {
     process.exit(2);
   }
 
   if (
-    safeMessage.includes("--wpm") ||
-    safeMessage.includes("text-scale") ||
-    safeMessage.includes("--summary") ||
-    safeMessage.startsWith("Config error:")
+    renderedMessage.includes("--wpm") ||
+    renderedMessage.includes("text-scale") ||
+    renderedMessage.includes("--summary") ||
+    renderedMessage.startsWith("Config error:")
   ) {
     process.exit(2);
   }

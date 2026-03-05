@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   createAgentReaderRuntime,
   executeAgentCommand,
+  executeAgentSummarizeCommand,
   getAgentReaderState,
 } from "../../src/agent/reader-api";
 import type { Word } from "../../src/processor/types";
@@ -43,6 +44,9 @@ describe("agent reader api", () => {
     expect(state.textScale).toBe("normal");
     expect(state.totalWords).toBe(3);
     expect(state.progress).toBe(0);
+    expect(state.summaryEnabled).toBe(false);
+    expect(state.summaryPreset).toBe("medium");
+    expect(state.summaryProvider).toBeNull();
   });
 
   it("supports runtime text-scale configuration", () => {
@@ -90,5 +94,34 @@ describe("agent reader api", () => {
 
     const state = getAgentReaderState(runtime);
     expect(state.textScale).toBe("small");
+  });
+
+  it("supports summarize-then-read through agent API", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    const summarizedRuntime = await executeAgentSummarizeCommand(
+      runtime,
+      {
+        preset: "short",
+        sourceLabel: "stdin",
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async () => "first summary sentence second summary sentence"
+    );
+
+    const state = getAgentReaderState(summarizedRuntime);
+    expect(state.currentIndex).toBe(0);
+    expect(state.currentWpm).toBe(320);
+    expect(state.summaryEnabled).toBe(true);
+    expect(state.summaryPreset).toBe("short");
+    expect(state.summaryProvider).toBe("openai");
+    expect(state.summarySourceLabel).toBe("stdin (summary:short)");
+    expect(state.totalWords).toBeGreaterThan(3);
   });
 });

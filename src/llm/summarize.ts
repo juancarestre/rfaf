@@ -70,7 +70,10 @@ function createModel(provider: LLMProvider, modelName: string, apiKey: string): 
   return providerFactory(modelName);
 }
 
-function mergedAbortSignal(timeoutMs: number, parentSignal?: AbortSignal): AbortSignal {
+function mergedAbortSignal(
+  timeoutMs: number,
+  parentSignal?: AbortSignal
+): { signal: AbortSignal; dispose: () => void } {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
     controller.abort(new Error("timeout"));
@@ -88,18 +91,19 @@ function mergedAbortSignal(timeoutMs: number, parentSignal?: AbortSignal): Abort
     }
   }
 
-  controller.signal.addEventListener(
-    "abort",
-    () => {
-      clearTimeout(timeoutId);
-      if (parentSignal) {
-        parentSignal.removeEventListener("abort", onAbort);
-      }
-    },
-    { once: true }
-  );
+  const dispose = () => {
+    clearTimeout(timeoutId);
+    if (parentSignal) {
+      parentSignal.removeEventListener("abort", onAbort);
+    }
+  };
 
-  return controller.signal;
+  controller.signal.addEventListener("abort", dispose, { once: true });
+
+  return {
+    signal: controller.signal,
+    dispose,
+  };
 }
 
 function isTransientRuntimeError(error: unknown): boolean {
@@ -163,6 +167,17 @@ function classifyRuntimeError(error: unknown): SummarizeRuntimeError {
   );
 }
 
+function getRetryDelayMs(attempt: number): number {
+  const base = 200;
+  const capped = Math.min(2_000, base * 2 ** attempt);
+  const jitter = Math.floor(Math.random() * 100);
+  return capped + jitter;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function summarizeTextWithGenerator(
   input: SummarizeInput,
   generate: StructuredGenerator
@@ -175,13 +190,13 @@ export async function summarizeTextWithGenerator(
 
   while (attempt <= input.maxRetries) {
     try {
-      const signal = mergedAbortSignal(input.timeoutMs, input.signal);
+      const { signal, dispose } = mergedAbortSignal(input.timeoutMs, input.signal);
       const result = await generate({
         model,
         schema: SummaryResponseSchema,
         prompt,
         abortSignal: signal,
-      });
+      }).finally(dispose);
 
       const normalized = normalizeSummaryText(result.object.summary);
       if (!normalized) {
@@ -199,6 +214,8 @@ export async function summarizeTextWithGenerator(
       if (attempt >= input.maxRetries || !isTransientRuntimeError(error)) {
         break;
       }
+
+      await sleep(getRetryDelayMs(attempt));
 
       attempt += 1;
     }

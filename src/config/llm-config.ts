@@ -7,6 +7,8 @@ import { UsageError } from "../cli/errors";
 
 export const DEFAULT_SUMMARIZE_TIMEOUT_MS = 20_000;
 export const DEFAULT_SUMMARIZE_MAX_RETRIES = 1;
+export const MAX_SUMMARIZE_TIMEOUT_MS = 60_000;
+export const MAX_SUMMARIZE_RETRIES = 5;
 
 const PROVIDERS = ["openai", "anthropic", "google"] as const;
 export type LLMProvider = (typeof PROVIDERS)[number];
@@ -61,12 +63,18 @@ function resolveSummaryPreset(value: unknown): SummaryPreset {
   throw new UsageError("Config error: invalid summary.default_preset value.");
 }
 
-function resolvePositiveInt(value: unknown, field: string, fallback: number): number {
+function resolveBoundedInt(
+  value: unknown,
+  field: string,
+  fallback: number,
+  min: number,
+  max: number
+): number {
   if (value === undefined || value === null) {
     return fallback;
   }
 
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max) {
     throw new UsageError(`Config error: invalid ${field} value.`);
   }
 
@@ -101,15 +109,19 @@ export function resolveLLMConfig(
   }
 
   const defaultPreset = resolveSummaryPreset(config.summary?.default_preset);
-  const timeoutMs = resolvePositiveInt(
+  const timeoutMs = resolveBoundedInt(
     config.summary?.timeout_ms,
     "summary.timeout_ms",
-    DEFAULT_SUMMARIZE_TIMEOUT_MS
+    DEFAULT_SUMMARIZE_TIMEOUT_MS,
+    1,
+    MAX_SUMMARIZE_TIMEOUT_MS
   );
-  const maxRetries = resolvePositiveInt(
+  const maxRetries = resolveBoundedInt(
     config.summary?.max_retries,
     "summary.max_retries",
-    DEFAULT_SUMMARIZE_MAX_RETRIES
+    DEFAULT_SUMMARIZE_MAX_RETRIES,
+    0,
+    MAX_SUMMARIZE_RETRIES
   );
 
   return {

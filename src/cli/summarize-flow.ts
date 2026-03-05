@@ -89,7 +89,7 @@ export async function summarizeBeforeRsvp(
 
     const message = error instanceof Error ? error.message : String(error);
     throw new SummarizeRuntimeError(
-      `Summarization failed [runtime]: ${message}`,
+      `Summarization failed [runtime]: ${sanitizeTerminalText(message)}`,
       "runtime"
     );
   } finally {

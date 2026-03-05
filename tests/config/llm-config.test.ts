@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 import {
   DEFAULT_SUMMARIZE_MAX_RETRIES,
   DEFAULT_SUMMARIZE_TIMEOUT_MS,
+  MAX_SUMMARIZE_RETRIES,
+  MAX_SUMMARIZE_TIMEOUT_MS,
   resolveLLMConfig,
 } from "../../src/config/llm-config";
 
@@ -98,5 +100,43 @@ describe("resolveLLMConfig", () => {
         {}
       )
     ).toThrow("Config error: missing API key");
+  });
+
+  it("throws when timeout exceeds max bound", () => {
+    expect(() =>
+      resolveLLMConfig(
+        {
+          llm: {
+            provider: "openai",
+            model: "gpt-5-mini",
+          },
+          summary: {
+            timeout_ms: MAX_SUMMARIZE_TIMEOUT_MS + 1,
+          },
+        },
+        {
+          OPENAI_API_KEY: "test",
+        }
+      )
+    ).toThrow("Config error: invalid summary.timeout_ms value");
+  });
+
+  it("throws when retries exceed max bound", () => {
+    expect(() =>
+      resolveLLMConfig(
+        {
+          llm: {
+            provider: "openai",
+            model: "gpt-5-mini",
+          },
+          summary: {
+            max_retries: MAX_SUMMARIZE_RETRIES + 1,
+          },
+        },
+        {
+          OPENAI_API_KEY: "test",
+        }
+      )
+    ).toThrow("Config error: invalid summary.max_retries value");
   });
 });

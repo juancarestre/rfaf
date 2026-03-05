@@ -29,15 +29,22 @@ function runCli(args: string[], env?: Record<string, string>) {
 
 describe("summary CLI contract", () => {
   it("returns usage error for unsupported summary presets", () => {
-    const result = runCli(["--summary", "huge", "tests/fixtures/sample.txt"]);
+    const result = runCli(["--summary=huge", "tests/fixtures/sample.txt"]);
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("Invalid --summary value");
   });
 
   it("uses validation-first semantics with --help and invalid summary", () => {
-    const result = runCli(["--help", "--summary", "huge"]);
+    const result = runCli(["--help", "--summary=huge"]);
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("Invalid --summary value");
+  });
+
+  it("treats unknown token after --summary as positional input path", () => {
+    const result = runCli(["--summary", "missing-file.txt"]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("File not found");
+    expect(result.stderr).not.toContain("Invalid --summary value");
   });
 
   it("fails with config usage error when summarize mode is enabled without config", () => {

@@ -1,7 +1,12 @@
 import {
+  DEFAULT_SUMMARY_PRESET,
+  type SummaryPreset,
+} from "../cli/summary-option";
+import {
   DEFAULT_TEXT_SCALE,
   type TextScalePreset,
 } from "../cli/text-scale-option";
+import type { LLMConfig } from "../config/llm-config";
 import {
   adjustWpm,
   createReader,
@@ -20,12 +25,23 @@ import {
   markWordAdvanced,
   type Session,
 } from "../engine/session";
+import { summarizeText } from "../llm/summarize";
+import { tokenize } from "../processor/tokenizer";
 import type { Word } from "../processor/types";
+
+interface AgentSummaryContext {
+  enabled: boolean;
+  preset: SummaryPreset;
+  provider: LLMConfig["provider"] | null;
+  model: string | null;
+  sourceLabel: string | null;
+}
 
 export interface AgentReaderRuntime {
   reader: Reader;
   session: Session;
   textScale: TextScalePreset;
+  summary: AgentSummaryContext;
 }
 
 export type AgentReaderCommand =
@@ -47,6 +63,17 @@ export interface AgentReaderState {
   totalWords: number;
   progress: number;
   wordsRead: number;
+  summaryEnabled: boolean;
+  summaryPreset: SummaryPreset;
+  summaryProvider: LLMConfig["provider"] | null;
+  summaryModel: string | null;
+  summarySourceLabel: string | null;
+}
+
+interface AgentSummarizeCommand {
+  preset: SummaryPreset;
+  sourceLabel: string;
+  llmConfig: Pick<LLMConfig, "provider" | "model" | "apiKey" | "timeoutMs" | "maxRetries">;
 }
 
 function syncSession(
@@ -91,6 +118,46 @@ export function createAgentReaderRuntime(
     reader: createReader(words, initialWpm),
     session: createSession(initialWpm),
     textScale,
+    summary: {
+      enabled: false,
+      preset: DEFAULT_SUMMARY_PRESET,
+      provider: null,
+      model: null,
+      sourceLabel: null,
+    },
+  };
+}
+
+export async function executeAgentSummarizeCommand(
+  runtime: AgentReaderRuntime,
+  command: AgentSummarizeCommand,
+  summarize: typeof summarizeText = summarizeText
+): Promise<AgentReaderRuntime> {
+  const originalContent = runtime.reader.words.map((word) => word.text).join(" ");
+  const summaryContent = await summarize({
+    provider: command.llmConfig.provider,
+    model: command.llmConfig.model,
+    apiKey: command.llmConfig.apiKey,
+    preset: command.preset,
+    input: originalContent,
+    timeoutMs: command.llmConfig.timeoutMs,
+    maxRetries: command.llmConfig.maxRetries,
+  });
+
+  const summaryWords = tokenize(summaryContent);
+  const currentWpm = runtime.reader.currentWpm;
+
+  return {
+    reader: createReader(summaryWords, currentWpm),
+    session: createSession(currentWpm),
+    textScale: runtime.textScale,
+    summary: {
+      enabled: true,
+      preset: command.preset,
+      provider: command.llmConfig.provider,
+      model: command.llmConfig.model,
+      sourceLabel: `${command.sourceLabel} (summary:${command.preset})`,
+    },
   };
 }
 
@@ -131,6 +198,7 @@ export function executeAgentCommand(
         reader: nextReader,
         session: createSession(nextReader.currentWpm),
         textScale: runtime.textScale,
+        summary: runtime.summary,
       };
     default: {
       const unreachable: never = command;
@@ -142,6 +210,7 @@ export function executeAgentCommand(
     reader: nextReader,
     session: syncSession(runtime.reader, runtime.session, nextReader, nowMs),
     textScale: runtime.textScale,
+    summary: runtime.summary,
   };
 }
 
@@ -159,5 +228,10 @@ export function getAgentReaderState(runtime: AgentReaderRuntime): AgentReaderSta
     totalWords,
     progress,
     wordsRead: session.wordsRead,
+    summaryEnabled: runtime.summary.enabled,
+    summaryPreset: runtime.summary.preset,
+    summaryProvider: runtime.summary.provider,
+    summaryModel: runtime.summary.model,
+    summarySourceLabel: runtime.summary.sourceLabel,
   };
 }
