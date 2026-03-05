@@ -20,4 +20,6 @@ export interface Word {
   isParagraphStart: boolean;
   /** Trailing punctuation tier, or null if none */
   trailingPunctuation: PunctuationTier | null;
+  /** Optional source words when this entry represents a grouped chunk */
+  sourceWords?: Word[];
 }

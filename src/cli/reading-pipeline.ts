@@ -1,0 +1,67 @@
+import { chunkWords } from "../processor/chunker";
+import { tokenize } from "../processor/tokenizer";
+import type { Word } from "../processor/types";
+import type { ReadingMode } from "./mode-option";
+import type { SummaryOption } from "./summary-option";
+
+interface ReadingPipelineInput {
+  documentContent: string;
+  sourceLabel: string;
+  summaryOption: SummaryOption;
+  mode: ReadingMode;
+}
+
+interface ReadingPipelineDeps {
+  summarizeBefore?: (input: {
+    documentContent: string;
+    sourceLabel: string;
+    summaryOption: SummaryOption;
+  }) => Promise<{ readingContent: string; sourceLabel: string }>;
+  tokenizeFn?: typeof tokenize;
+  chunkFn?: typeof chunkWords;
+}
+
+interface ReadingPipelineResult {
+  words: Word[];
+  sourceLabel: string;
+}
+
+export async function buildReadingPipeline(
+  input: ReadingPipelineInput,
+  deps: ReadingPipelineDeps = {}
+): Promise<ReadingPipelineResult> {
+  const tokenizeFn = deps.tokenizeFn ?? tokenize;
+  const chunkFn = deps.chunkFn ?? chunkWords;
+
+  const summaryResult = input.summaryOption.enabled
+    ? await (async () => {
+        const summarize =
+          deps.summarizeBefore ??
+          (async (summarizeInput: {
+            documentContent: string;
+            sourceLabel: string;
+            summaryOption: SummaryOption;
+          }) => {
+            const { summarizeBeforeRsvp } = await import("./summarize-flow");
+            return summarizeBeforeRsvp(summarizeInput);
+          });
+
+        return summarize({
+          documentContent: input.documentContent,
+          sourceLabel: input.sourceLabel,
+          summaryOption: input.summaryOption,
+        });
+      })()
+    : {
+        readingContent: input.documentContent,
+        sourceLabel: input.sourceLabel,
+      };
+
+  const tokenized = tokenizeFn(summaryResult.readingContent);
+  const words = input.mode === "chunked" ? chunkFn(tokenized) : tokenized;
+
+  return {
+    words,
+    sourceLabel: summaryResult.sourceLabel,
+  };
+}

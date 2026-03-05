@@ -1,7 +1,7 @@
 ---
 title: "feat: Add Phase 3 Sub-phase 11 Chunked Reading Mode"
 type: feat
-status: active
+status: completed
 date: 2026-03-05
 origin: docs/brainstorms/2026-03-05-rfaf-phase-3-subphase-11-chunked-mode-brainstorm.md
 ---
@@ -97,29 +97,29 @@ SpecFlow gaps addressed in this plan:
 
 ### Functional
 
-- [ ] `--mode` supports `rsvp|chunked` with `rsvp` as default.
-- [ ] Chunked mode renders adaptive 3-5 word groups for normal text flow.
-- [ ] Chunked mode can be activated alongside `--summary`.
-- [ ] In summary+chunked flow, chunking is applied to summarized text only.
+- [x] `--mode` supports `rsvp|chunked` with `rsvp` as default.
+- [x] Chunked mode renders adaptive 3-5 word groups for normal text flow.
+- [x] Chunked mode can be activated alongside `--summary`.
+- [x] In summary+chunked flow, chunking is applied to summarized text only.
 
 ### UX / Behavior
 
-- [ ] Chunked mode preserves existing keybindings/help text expectations.
-- [ ] WPM semantics remain consistent between RSVP and chunked modes.
-- [ ] Chunked display remains centered/stable in common terminal dimensions.
+- [x] Chunked mode preserves existing keybindings/help text expectations.
+- [x] WPM semantics remain consistent between RSVP and chunked modes.
+- [x] Chunked display remains centered/stable in common terminal dimensions.
 
 ### Failure & Contract Semantics
 
-- [ ] Invalid `--mode` values fail deterministically with usage-style error.
-- [ ] Summary failures still prevent playback start in chunked mode.
-- [ ] Chunking never emits empty chunks or drops words.
+- [x] Invalid `--mode` values fail deterministically with usage-style error.
+- [x] Summary failures still prevent playback start in chunked mode.
+- [x] Chunking never emits empty chunks or drops words.
 
 ### Quality Gates (TDD Mandatory)
 
-- [ ] Every contract slice is implemented with red -> green -> refactor.
-- [ ] `bun test` passes with zero failures.
-- [ ] `bun x tsc --noEmit` passes.
-- [ ] PTY validation is updated with chunked-mode checks.
+- [x] Every contract slice is implemented with red -> green -> refactor.
+- [x] `bun test` passes with zero failures.
+- [x] `bun x tsc --noEmit` passes.
+- [x] PTY validation is updated with chunked-mode checks.
 
 ## Testing Strategy (TDD First)
 

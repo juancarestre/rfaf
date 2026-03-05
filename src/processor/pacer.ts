@@ -31,6 +31,13 @@ const LENGTH_PENALTY_FACTOR = 0.04;
  * - First word (index 0) has a minimum of 200ms
  */
 export function getDisplayTime(word: Word, wpm: number): number {
+  if (word.sourceWords && word.sourceWords.length > 0) {
+    return word.sourceWords.reduce(
+      (total, sourceWord) => total + getDisplayTime(sourceWord, wpm),
+      0
+    );
+  }
+
   const baseMs = 60_000 / wpm;
 
   // Punctuation multiplier

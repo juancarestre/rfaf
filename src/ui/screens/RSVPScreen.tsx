@@ -52,6 +52,35 @@ function getLiveReadingTimeMs(session: Session): number {
   return session.totalReadingTimeMs + (Date.now() - session.lastPlayStartMs);
 }
 
+function isChunkedModeSource(sourceLabel: string): boolean {
+  return sourceLabel.toLowerCase().includes("[chunked]");
+}
+
+export function getRemainingSeconds(
+  words: Word[],
+  currentIndex: number,
+  currentWpm: number
+): number {
+  const remainingWords = words.slice(currentIndex + 1);
+  if (remainingWords.length === 0) {
+    return 0;
+  }
+
+  const hasChunkedWords = remainingWords.some(
+    (word) => Array.isArray(word.sourceWords) && word.sourceWords.length > 0
+  );
+
+  if (!hasChunkedWords) {
+    return Math.round((remainingWords.length * 60) / currentWpm);
+  }
+
+  const remainingMs = remainingWords.reduce(
+    (total, word) => total + getDisplayTime(word, currentWpm),
+    0
+  );
+  return Math.round(remainingMs / 1000);
+}
+
 function applyReaderAndSession(
   currentReader: Reader,
   currentSession: Session,
@@ -234,8 +263,11 @@ export function RSVPScreen({
     return reader.currentIndex / (words.length - 1);
   }, [reader.currentIndex, words.length]);
 
-  const remainingWords = Math.max(0, words.length - reader.currentIndex - 1);
-  const remainingSeconds = Math.round((remainingWords * 60) / reader.currentWpm);
+  const remainingSeconds = getRemainingSeconds(
+    words,
+    reader.currentIndex,
+    reader.currentWpm
+  );
 
   const stateLabel = useMemo(() => {
     if (reader.state === "finished") {
@@ -252,13 +284,15 @@ export function RSVPScreen({
       reader.currentIndex === 0 &&
       session.startTimeMs === null
     ) {
-      return "Press Space to start";
+      return isChunkedModeSource(sourceLabel)
+        ? "Press Space to start (Chunked)"
+        : "Press Space to start";
     }
 
     if (reader.state === "paused") return "Paused";
     if (reader.state === "playing") return "Playing";
     return "Idle";
-  }, [reader.currentIndex, reader.state, session]);
+  }, [reader.currentIndex, reader.state, session, sourceLabel]);
 
   return (
     <Box flexDirection="column" width={width} height={height} alignItems="flex-start">

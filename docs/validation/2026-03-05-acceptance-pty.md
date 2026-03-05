@@ -62,3 +62,20 @@ Smoke command used for timeout failure path:
 ```bash
 python3 -c "import os,pty,subprocess,tempfile,textwrap; d=tempfile.mkdtemp(prefix='rfaf-phase2-'); os.makedirs(os.path.join(d,'.rfaf'),exist_ok=True); open(os.path.join(d,'.rfaf','config.toml'),'w').write(textwrap.dedent('''[llm]\nprovider = \"openai\"\nmodel = \"gpt-4o-mini\"\n\n[summary]\ntimeout_ms = 1\nmax_retries = 0\n''')); env=dict(os.environ); env['HOME']=d; env['OPENAI_API_KEY']='dummy'; env['RFAF_NO_ALT_SCREEN']='1'; proc=subprocess.Popen(['bun','run','src/cli/index.tsx','--summary','tests/fixtures/sample.txt'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,text=True); out,err=proc.communicate(timeout=20); print('exit',proc.returncode); print(err)"
 ```
+
+## Phase 3 Sub-phase 11 Chunked Mode Extension
+
+Validated chunked-mode behavior and summary compatibility checks:
+
+1. `--mode` accepts `rsvp|chunked` and rejects unsupported values with usage-style error (exit `2`).
+2. Chunking emits deterministic adaptive groups with no dropped/duplicated words.
+3. Chunk pacing remains WPM-compatible by deriving chunk dwell from source word timing.
+4. Summary compatibility order is enforced: summarize -> tokenize -> chunk transform.
+5. Summary failure in `--mode chunked` path prevents playback start and exits non-zero.
+6. Chunk display remains vertically centered with existing reading-lane layout contract.
+
+Smoke command used for summary+chunked runtime failure path:
+
+```bash
+python3 -c "import os,subprocess,tempfile,textwrap; d=tempfile.mkdtemp(prefix='rfaf-chunked-summary-'); os.makedirs(os.path.join(d,'.rfaf'),exist_ok=True); open(os.path.join(d,'.rfaf','config.toml'),'w').write(textwrap.dedent('''[llm]\nprovider = \"openai\"\nmodel = \"gpt-4o-mini\"\n\n[summary]\ntimeout_ms = 1\nmax_retries = 0\n''')); env=dict(os.environ); env['HOME']=d; env['OPENAI_API_KEY']='dummy'; env['RFAF_NO_ALT_SCREEN']='1'; proc=subprocess.Popen(['bun','run','src/cli/index.tsx','--summary','--mode','chunked','tests/fixtures/sample.txt'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,text=True); out,err=proc.communicate(timeout=20); print('exit',proc.returncode); print(err)"
+```

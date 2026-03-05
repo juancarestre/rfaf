@@ -8,10 +8,15 @@ import { hideBin } from "yargs/helpers";
 import { readPlaintextFile } from "../ingest/plaintext";
 import { isStdinPiped, resolveInputSource } from "../ingest/detect";
 import { readStdin } from "../ingest/stdin";
-import { tokenize } from "../processor/tokenizer";
 import { sanitizeTerminalText } from "../ui/sanitize-terminal-text";
 import { App } from "../ui/App";
 import { SummarizeRuntimeError, UsageError } from "./errors";
+import {
+  DEFAULT_READING_MODE,
+  READING_MODES,
+  resolveReadingMode,
+} from "./mode-option";
+import { buildReadingPipeline } from "./reading-pipeline";
 import { runSessionLifecycle } from "./session-lifecycle";
 import {
   resolveSummaryOption,
@@ -180,7 +185,13 @@ async function main() {
       type: "string",
       describe: `Summarize before reading (${SUMMARY_PRESETS.join("|")}); bare --summary uses medium`,
     })
+    .option("mode", {
+      type: "string",
+      default: DEFAULT_READING_MODE,
+      describe: `Reading mode (${READING_MODES.join("|")})`,
+    })
     .requiresArg("text-scale")
+    .requiresArg("mode")
     .exitProcess(false)
     .help()
     .version()
@@ -195,6 +206,7 @@ async function main() {
 
   const wpm = parseWpm(argv.wpm);
   const textScale = resolveTextScale(argv.textScale);
+  const mode = resolveReadingMode(argv.mode);
   const summaryOption = resolveSummaryOption(
     argv.summary,
     wasSummaryFlagProvided(normalizedArgs)
@@ -236,24 +248,18 @@ async function main() {
     process.stderr.write(`${pendingWarning}\n`);
   }
 
-  const summaryResult = summaryOption.enabled
-    ? await (async () => {
-        const { summarizeBeforeRsvp } = await import("./summarize-flow");
-        return summarizeBeforeRsvp({
-          documentContent: document.content,
-          sourceLabel: document.source,
-          summaryOption,
-        });
-      })()
-    : {
-        readingContent: document.content,
-        sourceLabel: document.source,
-      };
+  const readingPipeline = await buildReadingPipeline({
+    documentContent: document.content,
+    sourceLabel: document.source,
+    summaryOption,
+    mode,
+  });
 
-  const readingContent = summaryResult.readingContent;
-  const sourceLabel = summaryResult.sourceLabel;
-
-  const words = tokenize(readingContent);
+  const words = readingPipeline.words;
+  const sourceLabel =
+    mode === "chunked"
+      ? `${readingPipeline.sourceLabel} [chunked]`
+      : readingPipeline.sourceLabel;
 
   await runSessionLifecycle({
     useAlternateScreen: useAlternateScreen(),
@@ -296,6 +302,7 @@ main().catch((error: unknown) => {
     renderedMessage.includes("--wpm") ||
     renderedMessage.includes("text-scale") ||
     renderedMessage.includes("--summary") ||
+    renderedMessage.includes("--mode") ||
     renderedMessage.startsWith("Config error:")
   ) {
     process.exit(2);
