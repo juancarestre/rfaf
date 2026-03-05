@@ -1,13 +1,19 @@
 import type { Document } from "./types";
+import { assertInputWithinLimit, DEFAULT_MAX_INPUT_BYTES } from "./constants";
+import { countWords } from "./metrics";
 
-function countWords(text: string): number {
-  const trimmed = text.trim();
-  if (!trimmed) return 0;
-  return trimmed.split(/\s+/).length;
+interface ReadStdinOptions {
+  maxBytes?: number;
+  readText?: () => Promise<string>;
 }
 
-export async function readStdin(): Promise<Document> {
-  const content = await Bun.stdin.text();
+export async function readStdin(options: ReadStdinOptions = {}): Promise<Document> {
+  const maxBytes = options.maxBytes ?? DEFAULT_MAX_INPUT_BYTES;
+  const readText = options.readText ?? (() => Bun.stdin.text());
+
+  const content = await readText();
+  const byteLength = new TextEncoder().encode(content).length;
+  assertInputWithinLimit(byteLength, maxBytes);
 
   if (!content.trim()) {
     throw new Error("File is empty");

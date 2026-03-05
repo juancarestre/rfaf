@@ -38,4 +38,13 @@ describe("readPlaintextFile", () => {
       "Binary file detected"
     );
   });
+
+  it("throws when file exceeds the configured byte limit", async () => {
+    const path = `/tmp/rfaf-too-large-${Date.now()}.txt`;
+    await Bun.write(path, "A".repeat(64));
+
+    await expect(readPlaintextFile(path, { maxBytes: 32 })).rejects.toThrow(
+      "Input exceeds maximum supported size"
+    );
+  });
 });

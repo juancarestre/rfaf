@@ -1,4 +1,5 @@
 import { Text } from "ink";
+import { sanitizeTerminalText } from "../sanitize-terminal-text";
 
 interface StatusBarProps {
   wpm: number;
@@ -23,10 +24,12 @@ export function StatusBar({
   sourceLabel,
 }: StatusBarProps) {
   const percent = Math.round(Math.max(0, Math.min(1, progress)) * 100);
+  const safeStateLabel = sanitizeTerminalText(stateLabel);
+  const safeSourceLabel = sanitizeTerminalText(sourceLabel);
 
   return (
     <Text dimColor>
-      {`${wpm} WPM | ${formatTime(remainingSeconds)} remaining | ${percent}% | ${stateLabel} | ${sourceLabel}`}
+      {`${wpm} WPM | ${formatTime(remainingSeconds)} remaining | ${percent}% | ${safeStateLabel} | ${safeSourceLabel}`}
     </Text>
   );
 }

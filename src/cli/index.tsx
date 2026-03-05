@@ -10,6 +10,7 @@ import { isStdinPiped, resolveInputSource } from "../ingest/detect";
 import { readStdin } from "../ingest/stdin";
 import { tokenize } from "../processor/tokenizer";
 import { App } from "../ui/App";
+import { runSessionLifecycle } from "./session-lifecycle";
 
 function useAlternateScreen(): boolean {
   if (process.env.RFAF_NO_ALT_SCREEN === "1") {
@@ -155,38 +156,20 @@ async function main() {
 
   const words = tokenize(document.content);
 
-  const alternateScreen = useAlternateScreen();
-  if (alternateScreen) {
-    enterAlternateScreen();
-  }
-
-  const input = getInteractiveInputStream();
-
-  if (!input.stdin) {
-    throw new Error(
-      "Interactive terminal input is required to run rfaf. Please run in a TTY terminal."
-    );
-  }
-
-  const app = render(
-    <App words={words} initialWpm={wpm} sourceLabel={document.source} />,
-    {
-      stdin: input.stdin,
-      exitOnCtrlC: true,
-      patchConsole: true,
-      maxFps: 60,
-      incrementalRendering: true,
-    }
-  );
-
-  try {
-    await app.waitUntilExit();
-  } finally {
-    input.cleanup();
-    if (alternateScreen) {
-      exitAlternateScreen();
-    }
-  }
+  await runSessionLifecycle({
+    useAlternateScreen: useAlternateScreen(),
+    getInputStream: getInteractiveInputStream,
+    enterAlternateScreen,
+    exitAlternateScreen,
+    renderApp: (stdin) =>
+      render(<App words={words} initialWpm={wpm} sourceLabel={document.source} />, {
+        stdin,
+        exitOnCtrlC: true,
+        patchConsole: true,
+        maxFps: 60,
+        incrementalRendering: true,
+      }),
+  });
 }
 
 main().catch((error: unknown) => {

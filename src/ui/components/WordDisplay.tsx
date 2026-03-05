@@ -1,5 +1,6 @@
 import { Box, Text } from "ink";
 import { getORPIndex } from "../orp";
+import { sanitizeTerminalText } from "../sanitize-terminal-text";
 
 interface WordDisplayProps {
   word: string;
@@ -30,7 +31,7 @@ export function getWordDisplayLayout(
   word: string,
   pivotColumn: number
 ): WordDisplayLayout {
-  const safeWord = word || "";
+  const safeWord = sanitizeTerminalText(word || "");
   const rawOrp = getORPIndex(safeWord.length);
   const orp = safeWord.length > 0 ? Math.min(rawOrp, safeWord.length - 1) : 0;
 

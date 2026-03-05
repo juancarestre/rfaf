@@ -1,11 +1,11 @@
 import type { Document } from "./types";
+import { assertInputWithinLimit, DEFAULT_MAX_INPUT_BYTES } from "./constants";
+import { countWords } from "./metrics";
 
 const BINARY_SNIFF_BYTES = 8192;
 
-function countWords(text: string): number {
-  const trimmed = text.trim();
-  if (!trimmed) return 0;
-  return trimmed.split(/\s+/).length;
+interface ReadPlaintextFileOptions {
+  maxBytes?: number;
 }
 
 function hasNullByte(bytes: Uint8Array): boolean {
@@ -15,7 +15,11 @@ function hasNullByte(bytes: Uint8Array): boolean {
   return false;
 }
 
-export async function readPlaintextFile(path: string): Promise<Document> {
+export async function readPlaintextFile(
+  path: string,
+  options: ReadPlaintextFileOptions = {}
+): Promise<Document> {
+  const maxBytes = options.maxBytes ?? DEFAULT_MAX_INPUT_BYTES;
   const file = Bun.file(path);
 
   if (!(await file.exists())) {
@@ -23,6 +27,7 @@ export async function readPlaintextFile(path: string): Promise<Document> {
   }
 
   const bytes = await file.bytes();
+  assertInputWithinLimit(bytes.length, maxBytes);
   const sniff = bytes.slice(0, Math.min(BINARY_SNIFF_BYTES, bytes.length));
   if (hasNullByte(sniff)) {
     throw new Error("Binary file detected");

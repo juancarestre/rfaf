@@ -27,4 +27,9 @@ describe("WordDisplay layout", () => {
   it("falls back to underline when NO_COLOR is enabled", () => {
     expect(getPivotStyle(true)).toEqual({ bold: true, underline: true });
   });
+
+  it("sanitizes terminal escape sequences from rendered word layout", () => {
+    const layout = getWordDisplayLayout("safe\u001b[31mevil\u001b[0m", 12);
+    expect(layout.before + layout.pivot + layout.after).toBe("safeevil");
+  });
 });
