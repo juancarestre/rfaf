@@ -1,0 +1,7 @@
+The quick brown fox jumps over the lazy dog. This is a simple sentence for testing purposes.
+
+Speed reading is a technique that helps people read faster while maintaining comprehension. The key is to reduce subvocalization and increase the visual span of each fixation.
+
+RSVP stands for Rapid Serial Visual Presentation. It displays one word at a time at a fixed point, eliminating the need for eye movement. Studies show that trained readers can achieve speeds of 500 to 1000 words per minute using this technique.
+
+However, comprehension may decrease at very high speeds, especially with complex or technical material. Finding the right balance between speed and understanding is essential for effective speed reading.

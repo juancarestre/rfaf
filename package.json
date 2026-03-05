@@ -1,0 +1,27 @@
+{
+  "name": "rfaf",
+  "version": "0.1.0",
+  "description": "Read Fast As F*ck — CLI/TUI speed-reading tool with RSVP",
+  "type": "module",
+  "main": "src/cli/index.tsx",
+  "bin": {
+    "rfaf": "src/cli/index.tsx"
+  },
+  "scripts": {
+    "start": "bun run src/cli/index.tsx",
+    "spike:ink": "bun run scripts/ink-spike.tsx",
+    "test": "bun test",
+    "test:watch": "bun test --watch"
+  },
+  "dependencies": {
+    "ink": "^6.0.0",
+    "react": "^19.0.0",
+    "yargs": "^17.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/yargs": "^17.0.0",
+    "bun-types": "^1.3.10",
+    "typescript": "^5.0.0"
+  }
+}
