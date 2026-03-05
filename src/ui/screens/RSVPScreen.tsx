@@ -26,11 +26,13 @@ import { HelpOverlay } from "../components/HelpOverlay";
 import { ProgressBar } from "../components/ProgressBar";
 import { StatusBar } from "../components/StatusBar";
 import { WordDisplay } from "../components/WordDisplay";
+import { getTextScaleConfig, type TextScalePreset } from "../text-scale";
 
 interface RSVPScreenProps {
   words: Word[];
   initialWpm: number;
   sourceLabel: string;
+  textScale: TextScalePreset;
 }
 
 function getLiveReadingTimeMs(session: Session): number {
@@ -75,7 +77,12 @@ function applyReaderAndSession(
   return nextSession;
 }
 
-export function RSVPScreen({ words, initialWpm, sourceLabel }: RSVPScreenProps) {
+export function RSVPScreen({
+  words,
+  initialWpm,
+  sourceLabel,
+  textScale,
+}: RSVPScreenProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const [terminalSize, setTerminalSize] = useState(() => ({
@@ -85,6 +92,7 @@ export function RSVPScreen({ words, initialWpm, sourceLabel }: RSVPScreenProps) 
   const [reader, setReader] = useState(() => createReader(words, initialWpm));
   const [session, setSession] = useState(() => createSession(initialWpm));
   const [helpVisible, setHelpVisible] = useState(false);
+  const textScaleConfig = getTextScaleConfig(textScale);
 
   useEffect(() => {
     const onResize = () => {
@@ -249,9 +257,17 @@ export function RSVPScreen({ words, initialWpm, sourceLabel }: RSVPScreenProps) 
         <>
           <Box flexGrow={1} justifyContent="center" alignItems="flex-start">
             {helpVisible ? (
-              <HelpOverlay />
+              <HelpOverlay
+                paddingX={textScaleConfig.helpPaddingX}
+                paddingY={textScaleConfig.helpPaddingY}
+              />
             ) : (
-              <WordDisplay word={currentWord} pivotColumn={Math.max(8, Math.floor(width / 2))} />
+              <WordDisplay
+                word={currentWord}
+                pivotColumn={Math.max(8, Math.floor(width / 2))}
+                topPaddingLines={textScaleConfig.wordTopPadding}
+                bottomPaddingLines={textScaleConfig.wordBottomPadding}
+              />
             )}
           </Box>
           <ProgressBar progress={progress} width={40} />
@@ -261,6 +277,8 @@ export function RSVPScreen({ words, initialWpm, sourceLabel }: RSVPScreenProps) 
             progress={progress}
             stateLabel={stateLabel}
             sourceLabel={sourceLabel}
+            dimColor={textScaleConfig.statusDim}
+            separator={textScaleConfig.statusSeparator}
           />
         </>
       )}

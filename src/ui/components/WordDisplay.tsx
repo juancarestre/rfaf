@@ -6,6 +6,8 @@ interface WordDisplayProps {
   word: string;
   pivotColumn: number;
   showGuide?: boolean;
+  topPaddingLines?: number;
+  bottomPaddingLines?: number;
 }
 
 export interface WordDisplayLayout {
@@ -47,6 +49,8 @@ export function WordDisplay({
   word,
   pivotColumn,
   showGuide = true,
+  topPaddingLines = 0,
+  bottomPaddingLines = 0,
 }: WordDisplayProps) {
   const { before, pivot, after, leftPadding } = getWordDisplayLayout(
     word,
@@ -58,6 +62,9 @@ export function WordDisplay({
 
   return (
     <Box flexDirection="column">
+      {Array.from({ length: topPaddingLines }, (_, index) => (
+        <Text key={`top-pad-${index}`}> </Text>
+      ))}
       {showGuide ? (
         <Text dimColor>{`${leftPadding}▼`}</Text>
       ) : null}
@@ -67,6 +74,9 @@ export function WordDisplay({
         <Text {...pivotStyle}>{pivot}</Text>
         <Text bold>{after}</Text>
       </Text>
+      {Array.from({ length: bottomPaddingLines }, (_, index) => (
+        <Text key={`bottom-pad-${index}`}> </Text>
+      ))}
     </Box>
   );
 }

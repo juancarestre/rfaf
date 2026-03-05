@@ -7,6 +7,8 @@ interface StatusBarProps {
   progress: number;
   stateLabel: string;
   sourceLabel: string;
+  dimColor?: boolean;
+  separator?: string;
 }
 
 function formatTime(seconds: number): string {
@@ -22,14 +24,16 @@ export function StatusBar({
   progress,
   stateLabel,
   sourceLabel,
+  dimColor = true,
+  separator = " | ",
 }: StatusBarProps) {
   const percent = Math.round(Math.max(0, Math.min(1, progress)) * 100);
   const safeStateLabel = sanitizeTerminalText(stateLabel);
   const safeSourceLabel = sanitizeTerminalText(sourceLabel);
 
   return (
-    <Text dimColor>
-      {`${wpm} WPM | ${formatTime(remainingSeconds)} remaining | ${percent}% | ${safeStateLabel} | ${safeSourceLabel}`}
+    <Text dimColor={dimColor}>
+      {`${wpm} WPM${separator}${formatTime(remainingSeconds)} remaining${separator}${percent}%${separator}${safeStateLabel}${separator}${safeSourceLabel}`}
     </Text>
   );
 }

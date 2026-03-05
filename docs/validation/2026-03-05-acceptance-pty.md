@@ -34,3 +34,14 @@ All targeted checks passed:
 
 - Added `RFAF_NO_ALT_SCREEN=1` test mode to make PTY output assertions stable.
 - Kept default production behavior with alternate-screen enabled.
+
+## Phase 1.2 Text Scale Extension
+
+Validated additional PTY smoke checks for Phase 1.2 text readability presets:
+
+1. `--text-scale small` starts in paused state without startup errors.
+2. `--text-scale normal` starts in paused state without startup errors.
+3. `--text-scale large` starts in paused state without startup errors.
+4. With `--text-scale large`, resizing to constrained dimensions still triggers the existing "Terminal too small" guard.
+
+These checks were executed with the same PTY harness pattern and `RFAF_NO_ALT_SCREEN=1` for stable output capture.

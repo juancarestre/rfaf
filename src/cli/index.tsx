@@ -11,6 +11,11 @@ import { readStdin } from "../ingest/stdin";
 import { tokenize } from "../processor/tokenizer";
 import { App } from "../ui/App";
 import { runSessionLifecycle } from "./session-lifecycle";
+import {
+  DEFAULT_TEXT_SCALE,
+  resolveTextScale,
+  TEXT_SCALE_PRESETS,
+} from "./text-scale-option";
 
 function useAlternateScreen(): boolean {
   if (process.env.RFAF_NO_ALT_SCREEN === "1") {
@@ -109,6 +114,13 @@ async function main() {
       default: 300,
       describe: "Initial speed (50-1500)",
     })
+    .option("text-scale", {
+      type: "string",
+      default: DEFAULT_TEXT_SCALE,
+      describe: `Text readability scale (${TEXT_SCALE_PRESETS.join("|")})`,
+    })
+    .requiresArg("text-scale")
+    .exitProcess(false)
     .help()
     .version()
     .strict(false);
@@ -121,6 +133,7 @@ async function main() {
   }
 
   const wpm = parseWpm(argv.wpm);
+  const textScale = resolveTextScale(argv.textScale);
 
   const source = resolveInputSource({
     fileArg,
@@ -162,13 +175,21 @@ async function main() {
     enterAlternateScreen,
     exitAlternateScreen,
     renderApp: (stdin) =>
-      render(<App words={words} initialWpm={wpm} sourceLabel={document.source} />, {
+      render(
+        <App
+          words={words}
+          initialWpm={wpm}
+          sourceLabel={document.source}
+          textScale={textScale}
+        />,
+        {
         stdin,
         exitOnCtrlC: true,
         patchConsole: true,
         maxFps: 60,
         incrementalRendering: true,
-      }),
+      }
+      ),
   });
 }
 
@@ -176,7 +197,11 @@ main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`${message}\n`);
 
-  if (message.includes("--wpm")) {
+  if (
+    message.includes("--wpm") ||
+    message.includes("--text-scale") ||
+    message.includes("text-scale")
+  ) {
     process.exit(2);
   }
 

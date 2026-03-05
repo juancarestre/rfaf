@@ -19,4 +19,21 @@ describe("StatusBar", () => {
     expect(output).toContain("okbad");
     expect(output).toContain("srcx");
   });
+
+  it("supports custom separator and dim toggle for readability presets", () => {
+    const output = renderToString(
+      React.createElement(StatusBar, {
+        wpm: 300,
+        remainingSeconds: 10,
+        progress: 0.5,
+        stateLabel: "Playing",
+        sourceLabel: "stdin",
+        separator: "   |   ",
+        dimColor: false,
+      })
+    );
+
+    expect(output).toContain("300 WPM   |   0:10 remaining   |   50%   |   Playing   |   stdin");
+    expect(output).not.toContain("\u001b[2m");
+  });
 });

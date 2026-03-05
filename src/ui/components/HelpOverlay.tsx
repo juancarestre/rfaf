@@ -1,8 +1,13 @@
 import { Box, Text } from "ink";
 
-export function HelpOverlay() {
+interface HelpOverlayProps {
+  paddingX?: number;
+  paddingY?: number;
+}
+
+export function HelpOverlay({ paddingX = 1, paddingY = 0 }: HelpOverlayProps) {
   return (
-    <Box flexDirection="column" borderStyle="round" paddingX={1} paddingY={0}>
+    <Box flexDirection="column" borderStyle="round" paddingX={paddingX} paddingY={paddingY}>
       <Text bold>Keybindings</Text>
       <Text>Space  pause/resume</Text>
       <Text>l / Right  step forward</Text>
