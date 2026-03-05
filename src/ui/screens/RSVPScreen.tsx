@@ -35,6 +35,16 @@ interface RSVPScreenProps {
   textScale: TextScalePreset;
 }
 
+export function getReadingLaneLayout(_: TextScalePreset): {
+  justifyContent: "center";
+  alignItems: "center";
+} {
+  return {
+    justifyContent: "center",
+    alignItems: "center",
+  };
+}
+
 function getLiveReadingTimeMs(session: Session): number {
   if (session.lastPlayStartMs === null) return session.totalReadingTimeMs;
   return session.totalReadingTimeMs + (Date.now() - session.lastPlayStartMs);
@@ -93,6 +103,7 @@ export function RSVPScreen({
   const [session, setSession] = useState(() => createSession(initialWpm));
   const [helpVisible, setHelpVisible] = useState(false);
   const textScaleConfig = getTextScaleConfig(textScale);
+  const readingLaneLayout = getReadingLaneLayout(textScale);
 
   useEffect(() => {
     const onResize = () => {
@@ -255,7 +266,11 @@ export function RSVPScreen({
         </Box>
       ) : (
         <>
-          <Box flexGrow={1} justifyContent="center" alignItems="flex-start">
+          <Box
+            flexGrow={1}
+            justifyContent={readingLaneLayout.justifyContent}
+            alignItems={readingLaneLayout.alignItems}
+          >
             {helpVisible ? (
               <HelpOverlay
                 paddingX={textScaleConfig.helpPaddingX}
@@ -267,6 +282,7 @@ export function RSVPScreen({
                 pivotColumn={Math.max(8, Math.floor(width / 2))}
                 topPaddingLines={textScaleConfig.wordTopPadding}
                 bottomPaddingLines={textScaleConfig.wordBottomPadding}
+                renderMode={textScaleConfig.wordRenderMode}
               />
             )}
           </Box>

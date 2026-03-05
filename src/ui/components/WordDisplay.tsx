@@ -8,6 +8,7 @@ interface WordDisplayProps {
   showGuide?: boolean;
   topPaddingLines?: number;
   bottomPaddingLines?: number;
+  renderMode?: "normal" | "expanded";
 }
 
 export interface WordDisplayLayout {
@@ -31,11 +32,30 @@ export function getPivotStyle(noColor: boolean): {
 
 export function getWordDisplayLayout(
   word: string,
-  pivotColumn: number
+  pivotColumn: number,
+  renderMode: "normal" | "expanded" = "normal"
 ): WordDisplayLayout {
   const safeWord = sanitizeTerminalText(word || "");
   const rawOrp = getORPIndex(safeWord.length);
   const orp = safeWord.length > 0 ? Math.min(rawOrp, safeWord.length - 1) : 0;
+
+  if (renderMode === "expanded") {
+    const spread = (value: string) => value.split("").join(" ");
+
+    const beforeExpanded = spread(safeWord.slice(0, orp).toUpperCase());
+    const pivotExpanded = (safeWord[orp] ?? "").toUpperCase();
+    const afterExpanded = spread(safeWord.slice(orp + 1).toUpperCase());
+
+    const before = beforeExpanded ? `${beforeExpanded} ` : "";
+    const after = afterExpanded ? ` ${afterExpanded}` : "";
+
+    return {
+      before,
+      pivot: pivotExpanded,
+      after,
+      leftPadding: " ".repeat(Math.max(0, pivotColumn - before.length)),
+    };
+  }
 
   return {
     before: safeWord.slice(0, orp),
@@ -51,10 +71,12 @@ export function WordDisplay({
   showGuide = true,
   topPaddingLines = 0,
   bottomPaddingLines = 0,
+  renderMode = "normal",
 }: WordDisplayProps) {
   const { before, pivot, after, leftPadding } = getWordDisplayLayout(
     word,
-    pivotColumn
+    pivotColumn,
+    renderMode
   );
 
   const noColor = Boolean(process.env.NO_COLOR);

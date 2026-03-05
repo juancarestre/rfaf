@@ -24,6 +24,7 @@ Using one explicit flag plus a stronger default keeps scope tight (YAGNI), align
 - **Use preset levels, not free-form numeric values**: `small`, `normal`, `large` style presets for predictable output and simpler UX.
 - **Keep scope focused on readability only**: No new reading modes or unrelated UI changes in this phase.
 - **Apply changes to core reading UI surfaces**: RSVP word lane first, with supporting status/help readability aligned to the same intent.
+- **Keep RSVP lane vertically centered across presets**: The active word should remain in terminal center independent of `--text-scale` choice.
 
 ## Open Questions
 

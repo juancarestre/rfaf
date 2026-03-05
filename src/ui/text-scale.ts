@@ -2,6 +2,7 @@ import type { TextScalePreset } from "../cli/text-scale-option";
 
 export interface TextScaleConfig {
   preset: TextScalePreset;
+  wordRenderMode: "normal" | "expanded";
   wordTopPadding: number;
   wordBottomPadding: number;
   statusDim: boolean;
@@ -13,6 +14,7 @@ export interface TextScaleConfig {
 const TEXT_SCALE_CONFIG: Record<TextScalePreset, TextScaleConfig> = {
   small: {
     preset: "small",
+    wordRenderMode: "normal",
     wordTopPadding: 0,
     wordBottomPadding: 0,
     statusDim: true,
@@ -22,6 +24,7 @@ const TEXT_SCALE_CONFIG: Record<TextScalePreset, TextScaleConfig> = {
   },
   normal: {
     preset: "normal",
+    wordRenderMode: "normal",
     wordTopPadding: 1,
     wordBottomPadding: 1,
     statusDim: false,
@@ -31,12 +34,13 @@ const TEXT_SCALE_CONFIG: Record<TextScalePreset, TextScaleConfig> = {
   },
   large: {
     preset: "large",
-    wordTopPadding: 2,
-    wordBottomPadding: 2,
+    wordRenderMode: "expanded",
+    wordTopPadding: 4,
+    wordBottomPadding: 4,
     statusDim: false,
-    statusSeparator: "   |   ",
-    helpPaddingX: 3,
-    helpPaddingY: 1,
+    statusSeparator: "    |    ",
+    helpPaddingX: 4,
+    helpPaddingY: 2,
   },
 };
 

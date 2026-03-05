@@ -32,4 +32,12 @@ describe("WordDisplay layout", () => {
     const layout = getWordDisplayLayout("safe\u001b[31mevil\u001b[0m", 12);
     expect(layout.before + layout.pivot + layout.after).toBe("safeevil");
   });
+
+  it("uses expanded uppercase spacing for large-word mode", () => {
+    const layout = getWordDisplayLayout("hello", 12, "expanded");
+    expect(layout.before).toBe("H ");
+    expect(layout.pivot).toBe("E");
+    expect(layout.after).toBe(" L L O");
+    expect(layout.leftPadding.length + layout.before.length).toBe(12);
+  });
 });

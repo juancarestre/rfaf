@@ -23,6 +23,9 @@ describe("getTextScaleConfig", () => {
 
     expect(normal.wordBottomPadding).toBeGreaterThanOrEqual(small.wordBottomPadding);
     expect(large.wordBottomPadding).toBeGreaterThanOrEqual(normal.wordBottomPadding);
+
+    expect(large.wordTopPadding - small.wordTopPadding).toBeGreaterThanOrEqual(3);
+    expect(large.wordBottomPadding - small.wordBottomPadding).toBeGreaterThanOrEqual(3);
   });
 
   it("uses stronger status readability for normal/large than small", () => {
@@ -33,5 +36,15 @@ describe("getTextScaleConfig", () => {
     expect(small.statusDim).toBeTrue();
     expect(normal.statusDim).toBeFalse();
     expect(large.statusDim).toBeFalse();
+  });
+
+  it("uses expanded word rendering mode for large preset", () => {
+    const small = getTextScaleConfig("small");
+    const normal = getTextScaleConfig("normal");
+    const large = getTextScaleConfig("large");
+
+    expect(small.wordRenderMode).toBe("normal");
+    expect(normal.wordRenderMode).toBe("normal");
+    expect(large.wordRenderMode).toBe("expanded");
   });
 });
