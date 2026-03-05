@@ -45,3 +45,20 @@ Validated additional PTY smoke checks for Phase 1.2 text readability presets:
 4. With `--text-scale large`, resizing to constrained dimensions still triggers the existing "Terminal too small" guard.
 
 These checks were executed with the same PTY harness pattern and `RFAF_NO_ALT_SCREEN=1` for stable output capture.
+
+## Phase 2 Summarize Extension
+
+Validated summarize startup/failure loading behavior via automated terminal smoke checks:
+
+1. `--summary` defaults to `medium` when passed without explicit preset (covered by CLI arg tests).
+2. Missing config in summarize mode returns a clear usage/config error (exit `2`) and does not start RSVP.
+3. Runtime summarize failure returns non-zero (exit `1`) and does not start RSVP.
+4. Non-TTY loading output remains deterministic (no broken spinner artifacts):
+   - emits `Summarizing: ...` while request is active
+   - emits `[error] summarization failed` on failure
+
+Smoke command used for timeout failure path:
+
+```bash
+python3 -c "import os,pty,subprocess,tempfile,textwrap; d=tempfile.mkdtemp(prefix='rfaf-phase2-'); os.makedirs(os.path.join(d,'.rfaf'),exist_ok=True); open(os.path.join(d,'.rfaf','config.toml'),'w').write(textwrap.dedent('''[llm]\nprovider = \"openai\"\nmodel = \"gpt-4o-mini\"\n\n[summary]\ntimeout_ms = 1\nmax_retries = 0\n''')); env=dict(os.environ); env['HOME']=d; env['OPENAI_API_KEY']='dummy'; env['RFAF_NO_ALT_SCREEN']='1'; proc=subprocess.Popen(['bun','run','src/cli/index.tsx','--summary','tests/fixtures/sample.txt'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,text=True); out,err=proc.communicate(timeout=20); print('exit',proc.returncode); print(err)"
+```

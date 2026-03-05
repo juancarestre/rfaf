@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { render } from "ink";
-import { closeSync, fstatSync, openSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync } from "node:fs";
 import { ReadStream } from "node:tty";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
@@ -10,7 +10,14 @@ import { isStdinPiped, resolveInputSource } from "../ingest/detect";
 import { readStdin } from "../ingest/stdin";
 import { tokenize } from "../processor/tokenizer";
 import { App } from "../ui/App";
+import { SummarizeRuntimeError, UsageError } from "./errors";
 import { runSessionLifecycle } from "./session-lifecycle";
+import { summarizeBeforeRsvp } from "./summarize-flow";
+import {
+  resolveSummaryOption,
+  SUMMARY_PRESETS,
+  wasSummaryFlagProvided,
+} from "./summary-option";
 import {
   DEFAULT_TEXT_SCALE,
   resolveTextScale,
@@ -91,18 +98,74 @@ function getInteractiveInputStream(): {
 
 function parseWpm(value: unknown): number {
   if (typeof value !== "number" || !Number.isInteger(value)) {
-    throw new Error("Invalid --wpm value. It must be an integer.");
+    throw new UsageError("Invalid --wpm value. It must be an integer.");
   }
 
   if (value < 50 || value > 1500) {
-    throw new Error("Invalid --wpm value. It must be between 50 and 1500.");
+    throw new UsageError("Invalid --wpm value. It must be between 50 and 1500.");
   }
 
   return value;
 }
 
+function normalizeSummaryArgs(rawArgs: string[]): string[] {
+  const normalized: string[] = [];
+
+  for (let index = 0; index < rawArgs.length; index++) {
+    const token = rawArgs[index];
+
+    if (token !== "--summary") {
+      normalized.push(token);
+      continue;
+    }
+
+    const next = rawArgs[index + 1];
+    if (next === undefined || next.startsWith("-")) {
+      normalized.push("--summary=");
+      continue;
+    }
+
+    const normalizedPreset = next.trim().toLowerCase();
+    if (SUMMARY_PRESETS.includes(normalizedPreset as (typeof SUMMARY_PRESETS)[number])) {
+      normalized.push(`--summary=${next}`);
+      index += 1;
+      continue;
+    }
+
+    if (existsSync(next)) {
+      normalized.push("--summary=");
+      continue;
+    }
+
+    normalized.push(`--summary=${next}`);
+    index += 1;
+  }
+
+  return normalized;
+}
+
+function redactSecrets(
+  message: string,
+  env: Record<string, string | undefined>
+): string {
+  let safe = message;
+  const candidates = [
+    env.OPENAI_API_KEY,
+    env.ANTHROPIC_API_KEY,
+    env.GOOGLE_GENERATIVE_AI_API_KEY,
+  ].filter((value): value is string => Boolean(value && value.length >= 8));
+
+  for (const secret of candidates) {
+    safe = safe.split(secret).join("[REDACTED]");
+  }
+
+  return safe.replace(/(sk|AIza)[A-Za-z0-9_\-]{8,}/g, "[REDACTED]");
+}
+
 async function main() {
-  const parser = yargs(hideBin(process.argv))
+  const rawArgs = hideBin(process.argv);
+  const normalizedArgs = normalizeSummaryArgs(rawArgs);
+  const parser = yargs(normalizedArgs)
     .scriptName("rfaf")
     .usage("$0 [file] [options]")
     .positional("file", {
@@ -119,6 +182,10 @@ async function main() {
       default: DEFAULT_TEXT_SCALE,
       describe: `Text readability scale (${TEXT_SCALE_PRESETS.join("|")})`,
     })
+    .option("summary", {
+      type: "string",
+      describe: `Summarize before reading (${SUMMARY_PRESETS.join("|")}); bare --summary uses medium`,
+    })
     .requiresArg("text-scale")
     .exitProcess(false)
     .help()
@@ -134,6 +201,10 @@ async function main() {
 
   const wpm = parseWpm(argv.wpm);
   const textScale = resolveTextScale(argv.textScale);
+  const summaryOption = resolveSummaryOption(
+    argv.summary,
+    wasSummaryFlagProvided(normalizedArgs)
+  );
 
   if (argv.help || argv.version) {
     return;
@@ -171,7 +242,16 @@ async function main() {
     process.stderr.write(`${pendingWarning}\n`);
   }
 
-  const words = tokenize(document.content);
+  const summaryResult = await summarizeBeforeRsvp({
+    documentContent: document.content,
+    sourceLabel: document.source,
+    summaryOption,
+  });
+
+  const readingContent = summaryResult.readingContent;
+  const sourceLabel = summaryResult.sourceLabel;
+
+  const words = tokenize(readingContent);
 
   await runSessionLifecycle({
     useAlternateScreen: useAlternateScreen(),
@@ -183,27 +263,37 @@ async function main() {
         <App
           words={words}
           initialWpm={wpm}
-          sourceLabel={document.source}
+          sourceLabel={sourceLabel}
           textScale={textScale}
         />,
         {
-        stdin,
-        exitOnCtrlC: true,
-        patchConsole: true,
-        maxFps: 60,
-        incrementalRendering: true,
-      }
+          stdin,
+          exitOnCtrlC: true,
+          patchConsole: true,
+          maxFps: 60,
+          incrementalRendering: true,
+        }
       ),
   });
 }
 
 main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`${message}\n`);
+  const safeMessage = redactSecrets(
+    message,
+    process.env as Record<string, string | undefined>
+  );
+  process.stderr.write(`${safeMessage}\n`);
+
+  if (error instanceof UsageError) {
+    process.exit(2);
+  }
 
   if (
-    message.includes("--wpm") ||
-    message.includes("text-scale")
+    safeMessage.includes("--wpm") ||
+    safeMessage.includes("text-scale") ||
+    safeMessage.includes("--summary") ||
+    safeMessage.startsWith("Config error:")
   ) {
     process.exit(2);
   }
