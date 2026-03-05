@@ -40,16 +40,15 @@ describe("summary CLI contract", () => {
     expect(result.stderr).toContain("Invalid --summary value");
   });
 
-  it("treats unknown token after --summary as positional input path", () => {
+  it("fails closed for unknown token after --summary", () => {
     const result = runCli(["--summary", "missing-file.txt"]);
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain("File not found");
-    expect(result.stderr).not.toContain("Invalid --summary value");
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain("Invalid --summary value");
   });
 
   it("fails with config usage error when summarize mode is enabled without config", () => {
     const result = runCli([
-      "--summary",
+      "--summary=medium",
       "tests/fixtures/sample.txt",
     ], {
       HOME: "/tmp/rfaf-summary-contract-test-no-config",
@@ -76,7 +75,7 @@ describe("summary CLI contract", () => {
       ].join("\n")
     );
 
-    const result = runCli(["--summary", "tests/fixtures/sample.txt"], {
+    const result = runCli(["--summary=medium", "tests/fixtures/sample.txt"], {
       HOME: homeDir,
       OPENAI_API_KEY: "dummy",
     });

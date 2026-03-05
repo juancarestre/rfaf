@@ -44,6 +44,7 @@ describe("agent reader api", () => {
     expect(state.textScale).toBe("normal");
     expect(state.totalWords).toBe(3);
     expect(state.progress).toBe(0);
+    expect(state.readingMode).toBe("rsvp");
     expect(state.summaryEnabled).toBe(false);
     expect(state.summaryPreset).toBe("medium");
     expect(state.summaryProvider).toBeNull();
@@ -122,6 +123,45 @@ describe("agent reader api", () => {
     expect(state.summaryPreset).toBe("short");
     expect(state.summaryProvider).toBe("openai");
     expect(state.summarySourceLabel).toBe("stdin (summary:short)");
+    expect(state.readingMode).toBe("rsvp");
     expect(state.totalWords).toBeGreaterThan(3);
+  });
+
+  it("supports switching to chunked reading mode through agent command", () => {
+    let runtime = createAgentReaderRuntime(words(), 300);
+    runtime = executeAgentCommand(runtime, {
+      type: "set_reading_mode",
+      readingMode: "chunked",
+    });
+
+    const state = getAgentReaderState(runtime);
+    expect(state.readingMode).toBe("chunked");
+    expect(state.totalWords).toBeLessThanOrEqual(2);
+  });
+
+  it("supports summarize + chunked parity through agent API", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    const summarizedRuntime = await executeAgentSummarizeCommand(
+      runtime,
+      {
+        preset: "medium",
+        sourceLabel: "stdin",
+        readingMode: "chunked",
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async () => "alpha beta gamma, delta epsilon zeta. eta theta iota"
+    );
+
+    const state = getAgentReaderState(summarizedRuntime);
+    expect(state.readingMode).toBe("chunked");
+    expect(state.summarySourceLabel).toContain("[chunked]");
+    expect(state.totalWords).toBeLessThan(9);
   });
 });

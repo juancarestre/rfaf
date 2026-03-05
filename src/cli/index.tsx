@@ -137,7 +137,8 @@ function normalizeSummaryArgs(rawArgs: string[]): string[] {
       continue;
     }
 
-    normalized.push("--summary=");
+    normalized.push(`--summary=${next}`);
+    index += 1;
   }
 
   return normalized;
@@ -256,10 +257,7 @@ async function main() {
   });
 
   const words = readingPipeline.words;
-  const sourceLabel =
-    mode === "chunked"
-      ? `${readingPipeline.sourceLabel} [chunked]`
-      : readingPipeline.sourceLabel;
+  const sourceLabel = readingPipeline.sourceLabel;
 
   await runSessionLifecycle({
     useAlternateScreen: useAlternateScreen(),
@@ -273,6 +271,7 @@ async function main() {
           initialWpm={wpm}
           sourceLabel={sourceLabel}
           textScale={textScale}
+          mode={mode}
         />,
         {
           stdin,

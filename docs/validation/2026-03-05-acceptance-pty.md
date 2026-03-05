@@ -60,7 +60,7 @@ Validated summarize startup/failure loading behavior via automated terminal smok
 Smoke command used for timeout failure path:
 
 ```bash
-python3 -c "import os,pty,subprocess,tempfile,textwrap; d=tempfile.mkdtemp(prefix='rfaf-phase2-'); os.makedirs(os.path.join(d,'.rfaf'),exist_ok=True); open(os.path.join(d,'.rfaf','config.toml'),'w').write(textwrap.dedent('''[llm]\nprovider = \"openai\"\nmodel = \"gpt-4o-mini\"\n\n[summary]\ntimeout_ms = 1\nmax_retries = 0\n''')); env=dict(os.environ); env['HOME']=d; env['OPENAI_API_KEY']='dummy'; env['RFAF_NO_ALT_SCREEN']='1'; proc=subprocess.Popen(['bun','run','src/cli/index.tsx','--summary','tests/fixtures/sample.txt'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,text=True); out,err=proc.communicate(timeout=20); print('exit',proc.returncode); print(err)"
+python3 -c "import os,pty,subprocess,tempfile,textwrap; d=tempfile.mkdtemp(prefix='rfaf-phase2-'); os.makedirs(os.path.join(d,'.rfaf'),exist_ok=True); open(os.path.join(d,'.rfaf','config.toml'),'w').write(textwrap.dedent('''[llm]\nprovider = \"openai\"\nmodel = \"gpt-4o-mini\"\n\n[summary]\ntimeout_ms = 1\nmax_retries = 0\n''')); env=dict(os.environ); env['HOME']=d; env['OPENAI_API_KEY']='dummy'; env['RFAF_NO_ALT_SCREEN']='1'; proc=subprocess.Popen(['bun','run','src/cli/index.tsx','--summary=medium','tests/fixtures/sample.txt'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,text=True); out,err=proc.communicate(timeout=20); print('exit',proc.returncode); print(err)"
 ```
 
 ## Phase 3 Sub-phase 11 Chunked Mode Extension

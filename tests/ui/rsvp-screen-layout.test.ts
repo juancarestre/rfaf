@@ -37,6 +37,7 @@ describe("RSVPScreen layout", () => {
         initialWpm: 300,
         sourceLabel: "stdin",
         textScale: "normal",
+        mode: "rsvp",
       })
     );
 

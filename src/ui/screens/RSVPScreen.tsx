@@ -1,5 +1,6 @@
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 import { useEffect, useMemo, useState } from "react";
+import type { ReadingMode } from "../../cli/mode-option";
 import { getDisplayTime } from "../../processor/pacer";
 import type { Word } from "../../processor/types";
 import {
@@ -33,6 +34,7 @@ interface RSVPScreenProps {
   initialWpm: number;
   sourceLabel: string;
   textScale: TextScalePreset;
+  mode: ReadingMode;
 }
 
 export function getReadingLaneLayout(_: TextScalePreset): {
@@ -52,8 +54,35 @@ function getLiveReadingTimeMs(session: Session): number {
   return session.totalReadingTimeMs + (Date.now() - session.lastPlayStartMs);
 }
 
-function isChunkedModeSource(sourceLabel: string): boolean {
-  return sourceLabel.toLowerCase().includes("[chunked]");
+function buildRemainingSecondsLookup(
+  words: Word[],
+  currentWpm: number
+): number[] {
+  const lookup = new Array<number>(words.length + 1).fill(0);
+  if (words.length === 0) {
+    return lookup;
+  }
+
+  const hasChunkedWords = words.some(
+    (word) => Array.isArray(word.sourceWords) && word.sourceWords.length > 0
+  );
+
+  if (!hasChunkedWords) {
+    for (let index = words.length; index >= 0; index--) {
+      lookup[index] = Math.round(((words.length - index) * 60) / currentWpm);
+    }
+    return lookup;
+  }
+
+  let suffixMs = 0;
+  for (let index = words.length - 1; index >= 0; index--) {
+    const word = words[index];
+    if (!word) continue;
+    suffixMs += getDisplayTime(word, currentWpm);
+    lookup[index] = Math.round(suffixMs / 1000);
+  }
+
+  return lookup;
 }
 
 export function getRemainingSeconds(
@@ -61,24 +90,9 @@ export function getRemainingSeconds(
   currentIndex: number,
   currentWpm: number
 ): number {
-  const remainingWords = words.slice(currentIndex + 1);
-  if (remainingWords.length === 0) {
-    return 0;
-  }
-
-  const hasChunkedWords = remainingWords.some(
-    (word) => Array.isArray(word.sourceWords) && word.sourceWords.length > 0
-  );
-
-  if (!hasChunkedWords) {
-    return Math.round((remainingWords.length * 60) / currentWpm);
-  }
-
-  const remainingMs = remainingWords.reduce(
-    (total, word) => total + getDisplayTime(word, currentWpm),
-    0
-  );
-  return Math.round(remainingMs / 1000);
+  const lookup = buildRemainingSecondsLookup(words, currentWpm);
+  const targetIndex = Math.min(words.length, Math.max(0, currentIndex + 1));
+  return lookup[targetIndex] ?? 0;
 }
 
 function applyReaderAndSession(
@@ -123,6 +137,7 @@ export function RSVPScreen({
   initialWpm,
   sourceLabel,
   textScale,
+  mode,
 }: RSVPScreenProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -263,11 +278,14 @@ export function RSVPScreen({
     return reader.currentIndex / (words.length - 1);
   }, [reader.currentIndex, words.length]);
 
-  const remainingSeconds = getRemainingSeconds(
-    words,
-    reader.currentIndex,
-    reader.currentWpm
+  const remainingSecondsLookup = useMemo(
+    () => buildRemainingSecondsLookup(words, reader.currentWpm),
+    [reader.currentWpm, words]
   );
+  const remainingSeconds =
+    remainingSecondsLookup[
+      Math.min(words.length, Math.max(0, reader.currentIndex + 1))
+    ] ?? 0;
 
   const stateLabel = useMemo(() => {
     if (reader.state === "finished") {
@@ -284,7 +302,7 @@ export function RSVPScreen({
       reader.currentIndex === 0 &&
       session.startTimeMs === null
     ) {
-      return isChunkedModeSource(sourceLabel)
+      return mode === "chunked"
         ? "Press Space to start (Chunked)"
         : "Press Space to start";
     }
@@ -292,7 +310,7 @@ export function RSVPScreen({
     if (reader.state === "paused") return "Paused";
     if (reader.state === "playing") return "Playing";
     return "Idle";
-  }, [reader.currentIndex, reader.state, session, sourceLabel]);
+  }, [mode, reader.currentIndex, reader.state, session]);
 
   return (
     <Box flexDirection="column" width={width} height={height} alignItems="flex-start">

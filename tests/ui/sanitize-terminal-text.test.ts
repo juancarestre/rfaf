@@ -16,4 +16,9 @@ describe("sanitizeTerminalText", () => {
     const input = "hello\u0000\u0008\n\tworld";
     expect(sanitizeTerminalText(input)).toBe("hello\n\tworld");
   });
+
+  it("removes carriage-return characters to prevent terminal line spoofing", () => {
+    const input = "safe\rspoofed";
+    expect(sanitizeTerminalText(input)).toBe("safespoofed");
+  });
 });

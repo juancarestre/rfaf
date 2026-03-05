@@ -25,8 +25,9 @@ describe("Chunked screen layout", () => {
       React.createElement(RSVPScreen, {
         words: chunks,
         initialWpm: 300,
-        sourceLabel: "stdin [chunked]",
+        sourceLabel: "stdin",
         textScale: "normal",
+        mode: "chunked",
       })
     );
 
@@ -44,8 +45,9 @@ describe("Chunked screen layout", () => {
       React.createElement(RSVPScreen, {
         words: chunks,
         initialWpm: 300,
-        sourceLabel: "stdin [chunked]",
+        sourceLabel: "stdin",
         textScale: "normal",
+        mode: "chunked",
       })
     );
 
