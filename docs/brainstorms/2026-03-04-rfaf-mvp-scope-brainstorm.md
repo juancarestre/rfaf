@@ -63,13 +63,14 @@ We chose (1) because the reading engine IS the product. If RSVP doesn't feel gre
 19. Clipboard support
 
 ### Phase 5: LLM Features + Polish
-20. `--translate-to`
-21. `--key-phrases` (intelligent emphasis)
-22. `--quiz` (post-reading comprehension)
-23. `--strategy` (LLM suggests best mode)
-24. Full config file (display, reading, defaults sections)
-25. Session history + stats
-26. `bun build --compile` for distribution
+20. `--no-bs` (remove bullshit from the text, only keep the good stuff and the most relevant information, remove or replace not readable characters like emojis, etc.)
+21. `--translate-to`
+22. `--key-phrases` (intelligent emphasis)
+23. `--quiz` (post-reading comprehension)
+24. `--strategy` (LLM suggests best mode)
+25. Full config file (display, reading, defaults sections)
+26. Session history + stats
+27. `bun build --compile` for distribution
 
 ## Open Questions
 
