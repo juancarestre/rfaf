@@ -185,10 +185,14 @@ export function GuidedScrollScreen({
   const height = terminalSize.height;
   const tooSmall = width < 40 || height < 8;
 
+  // Account for paddingX={1} on the text container (1 char each side = 2 total)
+  const textPaddingX = 1;
+  const contentWidth = Math.max(1, width - textPaddingX * 2);
+
   // Precomputed line map -- recomputed on resize or word change
   const lineMap = useMemo(
-    () => computeLineMap(words, width),
-    [words, width]
+    () => computeLineMap(words, contentWidth),
+    [words, contentWidth]
   );
 
   const updateReader = (transform: (reader: Reader) => Reader) => {
