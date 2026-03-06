@@ -9,6 +9,7 @@ interface WordDisplayProps {
   topPaddingLines?: number;
   bottomPaddingLines?: number;
   renderMode?: "normal" | "expanded";
+  orpVisualStyle?: "default" | "subtle";
 }
 
 const MAX_EXPANDED_RENDER_CHARS = 256;
@@ -40,11 +41,18 @@ export interface WordDisplayLayout {
   leftPadding: string;
 }
 
-export function getPivotStyle(noColor: boolean): {
+export function getPivotStyle(
+  noColor: boolean,
+  orpVisualStyle: "default" | "subtle" = "default"
+): {
   bold: true;
   underline?: true;
   color?: "red";
 } {
+  if (orpVisualStyle === "subtle") {
+    return { bold: true };
+  }
+
   if (noColor) {
     return { bold: true, underline: true };
   }
@@ -94,6 +102,7 @@ export function WordDisplay({
   topPaddingLines = 0,
   bottomPaddingLines = 0,
   renderMode = "normal",
+  orpVisualStyle = "default",
 }: WordDisplayProps) {
   const { before, pivot, after, leftPadding } = getWordDisplayLayout(
     word,
@@ -102,7 +111,7 @@ export function WordDisplay({
   );
 
   const noColor = Boolean(process.env.NO_COLOR);
-  const pivotStyle = getPivotStyle(noColor);
+  const pivotStyle = getPivotStyle(noColor, orpVisualStyle);
 
   return (
     <Box flexDirection="column" paddingTop={topPaddingLines} paddingBottom={bottomPaddingLines}>

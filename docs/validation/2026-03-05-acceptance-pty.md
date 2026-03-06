@@ -79,3 +79,21 @@ Smoke command used for summary+chunked runtime failure path:
 ```bash
 python3 -c "import os,subprocess,tempfile,textwrap; d=tempfile.mkdtemp(prefix='rfaf-chunked-summary-'); os.makedirs(os.path.join(d,'.rfaf'),exist_ok=True); open(os.path.join(d,'.rfaf','config.toml'),'w').write(textwrap.dedent('''[llm]\nprovider = \"openai\"\nmodel = \"gpt-4o-mini\"\n\n[summary]\ntimeout_ms = 1\nmax_retries = 0\n''')); env=dict(os.environ); env['HOME']=d; env['OPENAI_API_KEY']='dummy'; env['RFAF_NO_ALT_SCREEN']='1'; proc=subprocess.Popen(['bun','run','src/cli/index.tsx','--summary','--mode','chunked','tests/fixtures/sample.txt'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,text=True); out,err=proc.communicate(timeout=20); print('exit',proc.returncode); print(err)"
 ```
+
+## Phase 3 Sub-phase 12 Bionic Mode Extension
+
+Validated bionic-mode behavior and parity checks:
+
+1. `--mode` accepts `bionic` and still rejects unsupported values with usage-style error (exit `2`).
+2. Bionic transform preserves token ordering/count and applies conservative prefix emphasis, with stronger emphasis only on long/dense words.
+3. Bionic display remains vertically centered with existing reading-lane layout contract.
+4. Startup state label is mode-specific (`Press Space to start (Bionic)`).
+5. Summary compatibility order is enforced: summarize -> tokenize -> bionic transform.
+6. Summary failure in `--mode bionic` path prevents playback start and exits non-zero.
+7. Agent parity is preserved: `set_reading_mode` accepts `bionic` and summarize+mode metadata includes `[bionic]`.
+
+Smoke command used for summary+bionic runtime failure path:
+
+```bash
+python3 -c "import os,subprocess,tempfile,textwrap; d=tempfile.mkdtemp(prefix='rfaf-bionic-summary-'); os.makedirs(os.path.join(d,'.rfaf'),exist_ok=True); open(os.path.join(d,'.rfaf','config.toml'),'w').write(textwrap.dedent('''[llm]\nprovider = \"openai\"\nmodel = \"gpt-4o-mini\"\n\n[summary]\ntimeout_ms = 1\nmax_retries = 0\n''')); env=dict(os.environ); env['HOME']=d; env['OPENAI_API_KEY']='dummy'; env['RFAF_NO_ALT_SCREEN']='1'; proc=subprocess.Popen(['bun','run','src/cli/index.tsx','--summary','--mode','bionic','tests/fixtures/sample.txt'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env,text=True); out,err=proc.communicate(timeout=20); print('exit',proc.returncode); print(err)"
+```

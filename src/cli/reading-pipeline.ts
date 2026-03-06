@@ -1,3 +1,4 @@
+import { applyBionicMode } from "../processor/bionic";
 import { chunkWords } from "../processor/chunker";
 import { tokenize } from "../processor/tokenizer";
 import type { Word } from "../processor/types";
@@ -19,6 +20,7 @@ interface ReadingPipelineDeps {
   }) => Promise<{ readingContent: string; sourceLabel: string }>;
   tokenizeFn?: typeof tokenize;
   chunkFn?: typeof chunkWords;
+  bionicFn?: typeof applyBionicMode;
 }
 
 interface ReadingPipelineResult {
@@ -32,6 +34,7 @@ export async function buildReadingPipeline(
 ): Promise<ReadingPipelineResult> {
   const tokenizeFn = deps.tokenizeFn ?? tokenize;
   const chunkFn = deps.chunkFn ?? chunkWords;
+  const bionicFn = deps.bionicFn ?? applyBionicMode;
 
   const summaryResult = input.summaryOption.enabled
     ? await (async () => {
@@ -58,7 +61,12 @@ export async function buildReadingPipeline(
       };
 
   const tokenized = tokenizeFn(summaryResult.readingContent);
-  const words = input.mode === "chunked" ? chunkFn(tokenized) : tokenized;
+  const words =
+    input.mode === "chunked"
+      ? chunkFn(tokenized)
+      : input.mode === "bionic"
+        ? bionicFn(tokenized)
+        : tokenized;
 
   return {
     words,

@@ -49,6 +49,10 @@ export function getReadingLaneLayout(_: TextScalePreset): {
   };
 }
 
+export function getOrpVisualStyle(mode: ReadingMode): "default" | "subtle" {
+  return mode === "bionic" ? "subtle" : "default";
+}
+
 function getLiveReadingTimeMs(session: Session): number {
   if (session.lastPlayStartMs === null) return session.totalReadingTimeMs;
   return session.totalReadingTimeMs + (Date.now() - session.lastPlayStartMs);
@@ -302,9 +306,15 @@ export function RSVPScreen({
       reader.currentIndex === 0 &&
       session.startTimeMs === null
     ) {
-      return mode === "chunked"
-        ? "Press Space to start (Chunked)"
-        : "Press Space to start";
+      if (mode === "chunked") {
+        return "Press Space to start (Chunked)";
+      }
+
+      if (mode === "bionic") {
+        return "Press Space to start (Bionic)";
+      }
+
+      return "Press Space to start";
     }
 
     if (reader.state === "paused") return "Paused";
@@ -338,6 +348,7 @@ export function RSVPScreen({
                 topPaddingLines={textScaleConfig.wordTopPadding}
                 bottomPaddingLines={textScaleConfig.wordBottomPadding}
                 renderMode={textScaleConfig.wordRenderMode}
+                orpVisualStyle={getOrpVisualStyle(mode)}
               />
             )}
           </Box>

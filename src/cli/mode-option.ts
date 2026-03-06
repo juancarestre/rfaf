@@ -1,4 +1,4 @@
-export const READING_MODES = ["rsvp", "chunked"] as const;
+export const READING_MODES = ["rsvp", "chunked", "bionic"] as const;
 
 export type ReadingMode = (typeof READING_MODES)[number];
 
@@ -6,6 +6,10 @@ export const DEFAULT_READING_MODE: ReadingMode = "rsvp";
 
 function isReadingMode(value: string): value is ReadingMode {
   return READING_MODES.includes(value as ReadingMode);
+}
+
+function modeError(): Error {
+  return new Error(`Invalid --mode value. Use one of: ${READING_MODES.join(", ")}.`);
 }
 
 export function resolveReadingMode(value: unknown): ReadingMode {
@@ -16,12 +20,12 @@ export function resolveReadingMode(value: unknown): ReadingMode {
   }
 
   if (typeof rawValue !== "string") {
-    throw new Error("Invalid --mode value. Use one of: rsvp, chunked.");
+    throw modeError();
   }
 
   const normalized = rawValue.trim().toLowerCase();
   if (!isReadingMode(normalized)) {
-    throw new Error("Invalid --mode value. Use one of: rsvp, chunked.");
+    throw modeError();
   }
 
   return normalized;

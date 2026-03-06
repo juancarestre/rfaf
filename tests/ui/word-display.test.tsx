@@ -28,6 +28,11 @@ describe("WordDisplay layout", () => {
     expect(getPivotStyle(true)).toEqual({ bold: true, underline: true });
   });
 
+  it("uses subtle pivot style without color emphasis when requested", () => {
+    expect(getPivotStyle(false, "subtle")).toEqual({ bold: true });
+    expect(getPivotStyle(true, "subtle")).toEqual({ bold: true });
+  });
+
   it("sanitizes terminal escape sequences from rendered word layout", () => {
     const layout = getWordDisplayLayout("safe\u001b[31mevil\u001b[0m", 12);
     expect(layout.before + layout.pivot + layout.after).toBe("safeevil");

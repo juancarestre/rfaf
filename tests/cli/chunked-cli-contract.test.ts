@@ -18,15 +18,22 @@ function runCli(args: string[]) {
   };
 }
 
-describe("chunked mode CLI contract", () => {
+describe("reading mode CLI contract", () => {
   it("returns usage error for unsupported mode values", () => {
-    const result = runCli(["--mode", "bionic", "tests/fixtures/sample.txt"]);
+    const result = runCli(["--mode", "warp", "tests/fixtures/sample.txt"]);
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toContain("Invalid --mode value");
   });
 
   it("accepts chunked mode when validating args", () => {
     const result = runCli(["--help", "--mode=chunked"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain("--mode");
+  });
+
+  it("accepts bionic mode when validating args", () => {
+    const result = runCli(["--help", "--mode=bionic"]);
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("--mode");

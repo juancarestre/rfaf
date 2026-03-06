@@ -30,6 +30,7 @@ import {
   type Session,
 } from "../engine/session";
 import { summarizeText } from "../llm/summarize";
+import { applyBionicMode } from "../processor/bionic";
 import { chunkWords } from "../processor/chunker";
 import { tokenize } from "../processor/tokenizer";
 import type { Word } from "../processor/types";
@@ -91,7 +92,20 @@ function transformWordsForMode(words: Word[], readingMode: ReadingMode): Word[] 
     return chunkWords(words);
   }
 
+  if (readingMode === "bionic") {
+    return applyBionicMode(words);
+  }
+
   return words;
+}
+
+function buildSummarySourceLabel(
+  sourceLabel: string,
+  preset: SummaryPreset,
+  readingMode: ReadingMode
+): string {
+  const base = `${sourceLabel} (summary:${preset})`;
+  return readingMode === "rsvp" ? base : `${base} [${readingMode}]`;
 }
 
 function syncSession(
@@ -184,10 +198,11 @@ export async function executeAgentSummarizeCommand(
       preset: command.preset,
       provider: command.llmConfig.provider,
       model: command.llmConfig.model,
-      sourceLabel:
-        readingMode === "chunked"
-          ? `${command.sourceLabel} (summary:${command.preset}) [chunked]`
-          : `${command.sourceLabel} (summary:${command.preset})`,
+      sourceLabel: buildSummarySourceLabel(
+        command.sourceLabel,
+        command.preset,
+        readingMode
+      ),
     },
   };
 }

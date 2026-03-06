@@ -4,6 +4,7 @@ import React from "react";
 import type { Word } from "../../src/processor/types";
 import type { TextScalePreset } from "../../src/ui/text-scale";
 import {
+  getOrpVisualStyle,
   getReadingLaneLayout,
   RSVPScreen,
 } from "../../src/ui/screens/RSVPScreen";
@@ -46,5 +47,11 @@ describe("RSVPScreen layout", () => {
 
     expect(wordLine).toBeGreaterThanOrEqual(9);
     expect(wordLine).toBeLessThanOrEqual(14);
+  });
+
+  it("uses subtle ORP visual style in bionic mode only", () => {
+    expect(getOrpVisualStyle("bionic")).toBe("subtle");
+    expect(getOrpVisualStyle("rsvp")).toBe("default");
+    expect(getOrpVisualStyle("chunked")).toBe("default");
   });
 });

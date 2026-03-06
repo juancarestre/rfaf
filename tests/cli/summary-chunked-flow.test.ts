@@ -27,7 +27,7 @@ const tokenizedWords: Word[] = [
   },
 ];
 
-describe("summary + chunked pipeline", () => {
+describe("summary + mode pipeline", () => {
   it("applies summarize before tokenize and chunk transforms", async () => {
     const calls: string[] = [];
     const summaryOption: SummaryOption = { enabled: true, preset: "medium" };
@@ -91,6 +91,47 @@ describe("summary + chunked pipeline", () => {
 
     expect(calls).toEqual(["tokenize:ORIGINAL TEXT"]);
     expect(result.words).toBe(tokenizedWords);
+  });
+
+  it("applies summarize before tokenize and bionic transform", async () => {
+    const calls: string[] = [];
+
+    const result = await buildReadingPipeline(
+      {
+        documentContent: "ORIGINAL TEXT",
+        sourceLabel: "stdin",
+        summaryOption: { enabled: true, preset: "short" },
+        mode: "bionic",
+      },
+      {
+        summarizeBefore: async () => {
+          calls.push("summarize");
+          return {
+            readingContent: "SUMMARIZED FOR BIONIC",
+            sourceLabel: "stdin (summary:short)",
+          };
+        },
+        tokenizeFn: (content) => {
+          calls.push(`tokenize:${content}`);
+          return tokenizedWords;
+        },
+        chunkFn: (words) => {
+          calls.push(`chunk:${words.length}`);
+          return words;
+        },
+        bionicFn: (words) => {
+          calls.push(`bionic:${words.length}`);
+          return words;
+        },
+      }
+    );
+
+    expect(calls).toEqual([
+      "summarize",
+      "tokenize:SUMMARIZED FOR BIONIC",
+      `bionic:${tokenizedWords.length}`,
+    ]);
+    expect(result.sourceLabel).toBe("stdin (summary:short)");
   });
 
   it("does not execute tokenize/chunk when summarize fails in chunked mode", async () => {

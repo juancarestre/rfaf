@@ -18,6 +18,7 @@ describe("resolveReadingMode", () => {
 
   it("normalizes case and whitespace", () => {
     expect(resolveReadingMode("  CHUNKED ")).toBe("chunked");
+    expect(resolveReadingMode("  BIONIC ")).toBe("bionic");
   });
 
   it("uses last value when duplicate flags are parsed as array", () => {
@@ -25,6 +26,6 @@ describe("resolveReadingMode", () => {
   });
 
   it("throws for unsupported values", () => {
-    expect(() => resolveReadingMode("bionic")).toThrow("Invalid --mode value");
+    expect(() => resolveReadingMode("warp")).toThrow("Invalid --mode value");
   });
 });

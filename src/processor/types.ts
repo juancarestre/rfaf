@@ -22,4 +22,6 @@ export interface Word {
   trailingPunctuation: PunctuationTier | null;
   /** Optional source words when this entry represents a grouped chunk */
   sourceWords?: Word[];
+  /** Optional leading character count to emphasize in bionic mode */
+  bionicPrefixLength?: number;
 }

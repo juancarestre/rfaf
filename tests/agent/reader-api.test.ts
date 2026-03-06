@@ -164,4 +164,43 @@ describe("agent reader api", () => {
     expect(state.summarySourceLabel).toContain("[chunked]");
     expect(state.totalWords).toBeLessThan(9);
   });
+
+  it("supports switching to bionic reading mode through agent command", () => {
+    let runtime = createAgentReaderRuntime(words(), 300);
+    runtime = executeAgentCommand(runtime, {
+      type: "set_reading_mode",
+      readingMode: "bionic",
+    });
+
+    const state = getAgentReaderState(runtime);
+    expect(state.readingMode).toBe("bionic");
+    expect(state.currentWord).toBe("First");
+  });
+
+  it("supports summarize + bionic parity through agent API", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    const summarizedRuntime = await executeAgentSummarizeCommand(
+      runtime,
+      {
+        preset: "medium",
+        sourceLabel: "stdin",
+        readingMode: "bionic",
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async () => "alpha beta gamma, delta epsilon zeta. eta theta iota"
+    );
+
+    const state = getAgentReaderState(summarizedRuntime);
+    expect(state.readingMode).toBe("bionic");
+    expect(state.summarySourceLabel).toContain("[bionic]");
+    expect(state.currentWord).toBe("Alpha");
+    expect(state.totalWords).toBe(9);
+  });
 });
