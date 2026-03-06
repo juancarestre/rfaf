@@ -29,7 +29,9 @@ describe("Bionic screen layout", () => {
     );
 
     const lines = output.split("\n");
-    const wordLine = lines.findIndex((line) => line.includes(firstWord));
+    const wordLine = lines.findIndex((line) =>
+      line.toLowerCase().includes(firstWord.toLowerCase())
+    );
 
     expect(wordLine).toBeGreaterThanOrEqual(9);
     expect(wordLine).toBeLessThanOrEqual(14);

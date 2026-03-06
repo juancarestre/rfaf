@@ -38,6 +38,11 @@ describe("WordDisplay layout", () => {
     expect(layout.before + layout.pivot + layout.after).toBe("safeevil");
   });
 
+  it("renders bionic prefix emphasis in display layout only", () => {
+    const layout = getWordDisplayLayout("reader", 12, "normal", 2);
+    expect(layout.before + layout.pivot + layout.after).toBe("REader");
+  });
+
   it("uses expanded uppercase spacing for large-word mode", () => {
     const layout = getWordDisplayLayout("hello", 12, "expanded");
     expect(layout.before).toBe("H ");

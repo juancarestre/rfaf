@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   applyBionicMode,
+  emphasizePrefixAlphaNumeric,
   resolveBionicPrefixLength,
 } from "../../src/processor/bionic";
 import type { Word } from "../../src/processor/types";
@@ -21,11 +22,7 @@ describe("bionic transform", () => {
     const output = applyBionicMode(input);
 
     expect(output).toHaveLength(input.length);
-    expect(output.map((entry) => entry.text.toLowerCase())).toEqual([
-      "alpha",
-      "beta",
-      "gamma",
-    ]);
+    expect(output.map((entry) => entry.text)).toEqual(["alpha", "beta", "gamma"]);
     expect(output.map((entry) => entry.index)).toEqual([0, 1, 2]);
   });
 
@@ -46,13 +43,26 @@ describe("bionic transform", () => {
     expect(output[1]?.text.length).toBeGreaterThan(0);
   });
 
-  it("emphasizes only the computed prefix of alphanumeric characters", () => {
+  it("stores prefix metadata without mutating canonical word text", () => {
     const output = applyBionicMode([
       word("reader", 0),
       word("state-of-the-art", 1),
     ]);
 
-    expect(output[0]?.text).toBe("REader");
-    expect(output[1]?.text).toBe("STAte-of-the-art");
+    expect(output[0]?.text).toBe("reader");
+    expect(output[1]?.text).toBe("state-of-the-art");
+    expect(output[0]?.bionicPrefixLength).toBe(2);
+    expect(output[1]?.bionicPrefixLength).toBe(3);
+  });
+
+  it("applies visual emphasis on demand without changing source token", () => {
+    expect(emphasizePrefixAlphaNumeric("reader", 2)).toBe("REader");
+    expect(emphasizePrefixAlphaNumeric("state-of-the-art", 3)).toBe("STAte-of-the-art");
+  });
+
+  it("keeps canonical text stable for unicode words", () => {
+    const output = applyBionicMode([word("straße", 0)]);
+    expect(output[0]?.text).toBe("straße");
+    expect(output[0]?.bionicPrefixLength).toBeGreaterThan(0);
   });
 });

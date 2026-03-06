@@ -276,7 +276,8 @@ export function RSVPScreen({
     }
   });
 
-  const currentWord = words[reader.currentIndex]?.text ?? "";
+  const currentWordEntry = words[reader.currentIndex];
+  const currentWord = currentWordEntry?.text ?? "";
   const progress = useMemo(() => {
     if (words.length <= 1) return 1;
     return reader.currentIndex / (words.length - 1);
@@ -349,6 +350,9 @@ export function RSVPScreen({
                 bottomPaddingLines={textScaleConfig.wordBottomPadding}
                 renderMode={textScaleConfig.wordRenderMode}
                 orpVisualStyle={getOrpVisualStyle(mode)}
+                bionicPrefixLength={
+                  mode === "bionic" ? currentWordEntry?.bionicPrefixLength ?? 0 : 0
+                }
               />
             )}
           </Box>

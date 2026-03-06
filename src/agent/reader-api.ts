@@ -1,5 +1,6 @@
 import {
   DEFAULT_READING_MODE,
+  READING_MODES,
   type ReadingMode,
 } from "../cli/mode-option";
 import {
@@ -43,12 +44,15 @@ interface AgentSummaryContext {
   sourceLabel: string | null;
 }
 
+type ModeWordCache = Partial<Record<ReadingMode, Word[]>>;
+
 export interface AgentReaderRuntime {
   reader: Reader;
   session: Session;
   textScale: TextScalePreset;
   readingMode: ReadingMode;
   sourceWords: Word[];
+  modeWordCache: ModeWordCache;
   summary: AgentSummaryContext;
 }
 
@@ -97,6 +101,43 @@ function transformWordsForMode(words: Word[], readingMode: ReadingMode): Word[] 
   }
 
   return words;
+}
+
+function isReadingMode(value: string): value is ReadingMode {
+  return READING_MODES.includes(value as ReadingMode);
+}
+
+function requireReadingMode(value: unknown, context: string): ReadingMode {
+  if (typeof value !== "string") {
+    throw new Error(`Invalid readingMode in ${context}. Use one of: ${READING_MODES.join(", ")}.`);
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!isReadingMode(normalized)) {
+    throw new Error(`Invalid readingMode in ${context}. Use one of: ${READING_MODES.join(", ")}.`);
+  }
+
+  return normalized;
+}
+
+function getWordsForMode(
+  sourceWords: Word[],
+  readingMode: ReadingMode,
+  modeWordCache: ModeWordCache
+): { words: Word[]; modeWordCache: ModeWordCache } {
+  const cached = modeWordCache[readingMode];
+  if (cached) {
+    return { words: cached, modeWordCache };
+  }
+
+  const transformedWords = transformWordsForMode(sourceWords, readingMode);
+  return {
+    words: transformedWords,
+    modeWordCache: {
+      ...modeWordCache,
+      [readingMode]: transformedWords,
+    },
+  };
 }
 
 function buildSummarySourceLabel(
@@ -149,6 +190,10 @@ export function createAgentReaderRuntime(
 ): AgentReaderRuntime {
   const sourceWords = words;
   const transformedWords = transformWordsForMode(sourceWords, readingMode);
+  const modeWordCache: ModeWordCache = {
+    rsvp: sourceWords,
+    [readingMode]: transformedWords,
+  };
 
   return {
     reader: createReader(transformedWords, initialWpm),
@@ -156,6 +201,7 @@ export function createAgentReaderRuntime(
     textScale,
     readingMode,
     sourceWords,
+    modeWordCache,
     summary: {
       enabled: false,
       preset: DEFAULT_SUMMARY_PRESET,
@@ -171,6 +217,11 @@ export async function executeAgentSummarizeCommand(
   command: AgentSummarizeCommand,
   summarize: typeof summarizeText = summarizeText
 ): Promise<AgentReaderRuntime> {
+  const readingMode =
+    command.readingMode === undefined
+      ? runtime.readingMode
+      : requireReadingMode(command.readingMode, "summarize command");
+
   const originalContent = runtime.sourceWords.map((word) => word.text).join(" ");
   const summaryContent = await summarize({
     provider: command.llmConfig.provider,
@@ -183,8 +234,11 @@ export async function executeAgentSummarizeCommand(
   });
 
   const summaryWords = tokenize(summaryContent);
-  const readingMode = command.readingMode ?? runtime.readingMode;
-  const transformedSummaryWords = transformWordsForMode(summaryWords, readingMode);
+  const { words: transformedSummaryWords, modeWordCache } = getWordsForMode(
+    summaryWords,
+    readingMode,
+    { rsvp: summaryWords }
+  );
   const currentWpm = runtime.reader.currentWpm;
 
   return {
@@ -193,6 +247,7 @@ export async function executeAgentSummarizeCommand(
     textScale: runtime.textScale,
     readingMode,
     sourceWords: summaryWords,
+    modeWordCache,
     summary: {
       enabled: true,
       preset: command.preset,
@@ -239,9 +294,14 @@ export function executeAgentCommand(
         textScale: command.textScale,
       };
     case "set_reading_mode": {
-      const transformedWords = transformWordsForMode(
+      const readingMode = requireReadingMode(
+        command.readingMode,
+        "set_reading_mode command"
+      );
+      const { words: transformedWords, modeWordCache } = getWordsForMode(
         runtime.sourceWords,
-        command.readingMode
+        readingMode,
+        runtime.modeWordCache
       );
       const currentWpm = runtime.reader.currentWpm;
       const baseReader = createReader(transformedWords, currentWpm);
@@ -265,7 +325,8 @@ export function executeAgentCommand(
           state: runtime.reader.state === "finished" ? "finished" : "paused",
         },
         session: createSession(currentWpm),
-        readingMode: command.readingMode,
+        readingMode,
+        modeWordCache,
       };
     }
     case "restart":
@@ -276,6 +337,7 @@ export function executeAgentCommand(
         textScale: runtime.textScale,
         readingMode: runtime.readingMode,
         sourceWords: runtime.sourceWords,
+        modeWordCache: runtime.modeWordCache,
         summary: runtime.summary,
       };
     default: {
@@ -290,6 +352,7 @@ export function executeAgentCommand(
     textScale: runtime.textScale,
     readingMode: runtime.readingMode,
     sourceWords: runtime.sourceWords,
+    modeWordCache: runtime.modeWordCache,
     summary: runtime.summary,
   };
 }

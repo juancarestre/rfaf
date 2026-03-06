@@ -3,7 +3,7 @@ import type { Word } from "./types";
 function countAlphaNumericChars(value: string): number {
   let count = 0;
   for (const char of value) {
-    if (/\p{L}|\p{N}/u.test(char)) {
+    if (ALPHANUMERIC_CHAR.test(char)) {
       count += 1;
     }
   }
@@ -14,7 +14,9 @@ function hasDenseConnectors(value: string): boolean {
   return /[-_/]/.test(value);
 }
 
-function emphasizePrefixAlphaNumeric(text: string, prefixLength: number): string {
+const ALPHANUMERIC_CHAR = /\p{L}|\p{N}/u;
+
+export function emphasizePrefixAlphaNumeric(text: string, prefixLength: number): string {
   if (prefixLength <= 0) {
     return text;
   }
@@ -23,7 +25,7 @@ function emphasizePrefixAlphaNumeric(text: string, prefixLength: number): string
   let emphasizedCount = 0;
 
   for (const char of text) {
-    if (emphasizedCount < prefixLength && /\p{L}|\p{N}/u.test(char)) {
+    if (emphasizedCount < prefixLength && ALPHANUMERIC_CHAR.test(char)) {
       emphasized += char.toUpperCase();
       emphasizedCount += 1;
     } else {
@@ -67,7 +69,6 @@ export function applyBionicMode(words: Word[]): Word[] {
     const bionicPrefixLength = resolveBionicPrefixLength(word.text);
     return {
       ...word,
-      text: emphasizePrefixAlphaNumeric(word.text, bionicPrefixLength),
       bionicPrefixLength,
     };
   });

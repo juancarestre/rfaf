@@ -1,4 +1,5 @@
 import { Box, Text } from "ink";
+import { emphasizePrefixAlphaNumeric } from "../../processor/bionic";
 import { getORPIndex } from "../orp";
 import { sanitizeTerminalText } from "../sanitize-terminal-text";
 
@@ -10,6 +11,7 @@ interface WordDisplayProps {
   bottomPaddingLines?: number;
   renderMode?: "normal" | "expanded";
   orpVisualStyle?: "default" | "subtle";
+  bionicPrefixLength?: number;
 }
 
 const MAX_EXPANDED_RENDER_CHARS = 256;
@@ -63,11 +65,13 @@ export function getPivotStyle(
 export function getWordDisplayLayout(
   word: string,
   pivotColumn: number,
-  renderMode: "normal" | "expanded" = "normal"
+  renderMode: "normal" | "expanded" = "normal",
+  bionicPrefixLength = 0
 ): WordDisplayLayout {
   const safeWord = sanitizeTerminalText(word || "");
-  const displayWord =
+  const baseDisplayWord =
     renderMode === "expanded" ? truncateExpandedRenderWord(safeWord) : safeWord;
+  const displayWord = emphasizePrefixAlphaNumeric(baseDisplayWord, bionicPrefixLength);
   const rawOrp = getORPIndex(displayWord.length);
   const orp = displayWord.length > 0 ? Math.min(rawOrp, displayWord.length - 1) : 0;
 
@@ -103,11 +107,13 @@ export function WordDisplay({
   bottomPaddingLines = 0,
   renderMode = "normal",
   orpVisualStyle = "default",
+  bionicPrefixLength = 0,
 }: WordDisplayProps) {
   const { before, pivot, after, leftPadding } = getWordDisplayLayout(
     word,
     pivotColumn,
-    renderMode
+    renderMode,
+    bionicPrefixLength
   );
 
   const noColor = Boolean(process.env.NO_COLOR);

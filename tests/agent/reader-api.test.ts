@@ -174,7 +174,7 @@ describe("agent reader api", () => {
 
     const state = getAgentReaderState(runtime);
     expect(state.readingMode).toBe("bionic");
-    expect(state.currentWord).toBe("First");
+    expect(state.currentWord).toBe("first");
   });
 
   it("supports summarize + bionic parity through agent API", async () => {
@@ -200,7 +200,109 @@ describe("agent reader api", () => {
     const state = getAgentReaderState(summarizedRuntime);
     expect(state.readingMode).toBe("bionic");
     expect(state.summarySourceLabel).toContain("[bionic]");
-    expect(state.currentWord).toBe("Alpha");
+    expect(state.currentWord).toBe("alpha");
     expect(state.totalWords).toBe(9);
+  });
+
+  it("fails closed for invalid mode payload in set_reading_mode command", () => {
+    const runtime = createAgentReaderRuntime(words(), 300);
+
+    expect(() =>
+      executeAgentCommand(runtime, {
+        type: "set_reading_mode",
+        readingMode: "\u001b[31mchunked" as unknown as "rsvp",
+      })
+    ).toThrow("Invalid readingMode");
+  });
+
+  it("fails closed for invalid summarize readingMode before summarization", async () => {
+    const runtime = createAgentReaderRuntime(words(), 300);
+    let summarizeCalls = 0;
+
+    await expect(
+      executeAgentSummarizeCommand(
+        runtime,
+        {
+          preset: "short",
+          sourceLabel: "stdin",
+          readingMode: "warp" as unknown as "rsvp",
+          llmConfig: {
+            provider: "openai",
+            model: "gpt-5-mini",
+            apiKey: "test",
+            timeoutMs: 1_000,
+            maxRetries: 0,
+          },
+        },
+        async () => {
+          summarizeCalls += 1;
+          return "should not run";
+        }
+      )
+    ).rejects.toThrow("Invalid readingMode");
+
+    expect(summarizeCalls).toBe(0);
+  });
+
+  it("reuses cached transformed words when switching back to bionic mode", () => {
+    let runtime = createAgentReaderRuntime(words(), 300);
+
+    runtime = executeAgentCommand(runtime, {
+      type: "set_reading_mode",
+      readingMode: "bionic",
+    });
+    const firstBionicWords = runtime.reader.words;
+
+    runtime = executeAgentCommand(runtime, {
+      type: "set_reading_mode",
+      readingMode: "rsvp",
+    });
+
+    runtime = executeAgentCommand(runtime, {
+      type: "set_reading_mode",
+      readingMode: "bionic",
+    });
+
+    expect(runtime.reader.words).toBe(firstBionicWords);
+  });
+
+  it("resets mode cache when source corpus changes via summarize", async () => {
+    let runtime = createAgentReaderRuntime(words(), 300);
+    runtime = executeAgentCommand(runtime, {
+      type: "set_reading_mode",
+      readingMode: "bionic",
+    });
+    const oldBionicWords = runtime.reader.words;
+
+    runtime = await executeAgentSummarizeCommand(
+      runtime,
+      {
+        preset: "medium",
+        sourceLabel: "stdin",
+        readingMode: "bionic",
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async () => "new summary content only"
+    );
+
+    expect(runtime.reader.words).not.toBe(oldBionicWords);
+
+    const firstSummaryBionicWords = runtime.reader.words;
+    runtime = executeAgentCommand(runtime, {
+      type: "set_reading_mode",
+      readingMode: "rsvp",
+    });
+    runtime = executeAgentCommand(runtime, {
+      type: "set_reading_mode",
+      readingMode: "bionic",
+    });
+
+    expect(runtime.reader.words).toBe(firstSummaryBionicWords);
   });
 });
