@@ -1,4 +1,4 @@
-export const READING_MODES = ["rsvp", "chunked", "bionic"] as const;
+export const READING_MODES = ["rsvp", "chunked", "bionic", "scroll"] as const;
 
 export type ReadingMode = (typeof READING_MODES)[number];
 
