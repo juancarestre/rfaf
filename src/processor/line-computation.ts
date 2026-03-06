@@ -1,3 +1,4 @@
+import { sanitizeTerminalText } from "../terminal/sanitize-terminal-text";
 import type { Word } from "./types";
 
 /**
@@ -16,6 +17,10 @@ export interface LineMap {
   wordToLine: number[];
   /** For each line index, the first word index on that line */
   lineToFirstWord: number[];
+}
+
+function getDisplayWordWidth(word: Word): number {
+  return sanitizeTerminalText(word.text).length;
 }
 
 /**
@@ -38,7 +43,7 @@ export function computeLineMap(words: Word[], terminalWidth: number): LineMap {
   let currentLineWidth = 0;
 
   for (let i = 0; i < words.length; i++) {
-    const wordLen = words[i]!.text.length;
+    const wordLen = getDisplayWordWidth(words[i]!);
 
     if (i === 0) {
       // First word always goes on line 0
@@ -92,4 +97,30 @@ export function getFirstWordIndexForLine(lineMap: LineMap, lineIndex: number): n
     return lineMap.lineToFirstWord[lineMap.lineToFirstWord.length - 1]!;
   }
   return lineMap.lineToFirstWord[lineIndex]!;
+}
+
+export function getLastWordIndexForLine(lineMap: LineMap, lineIndex: number): number {
+  if (lineMap.lineToFirstWord.length === 0) return 0;
+
+  const safeLineIndex = Math.max(0, Math.min(lineIndex, lineMap.totalLines - 1));
+  if (safeLineIndex >= lineMap.totalLines - 1) {
+    return lineMap.wordToLine.length - 1;
+  }
+
+  return getFirstWordIndexForLine(lineMap, safeLineIndex + 1) - 1;
+}
+
+export function getNextLineStartIndex(lineMap: LineMap, currentWordIndex: number): number {
+  const currentLine = getLineForWordIndex(lineMap, currentWordIndex);
+  const nextLine = Math.min(currentLine + 1, Math.max(0, lineMap.totalLines - 1));
+  return getFirstWordIndexForLine(lineMap, nextLine);
+}
+
+export function getPreviousLineStartIndex(
+  lineMap: LineMap,
+  currentWordIndex: number
+): number {
+  const currentLine = getLineForWordIndex(lineMap, currentWordIndex);
+  const previousLine = Math.max(0, currentLine - 1);
+  return getFirstWordIndexForLine(lineMap, previousLine);
 }

@@ -4,7 +4,8 @@ import {
   computeLineMap,
   getLineForWordIndex,
   getFirstWordIndexForLine,
-  type LineMap,
+  getNextLineStartIndex,
+  getPreviousLineStartIndex,
 } from "../../src/processor/line-computation";
 
 function makeWord(text: string, index: number, paragraphIndex = 0, isParagraphStart = false): Word {
@@ -77,6 +78,16 @@ describe("computeLineMap", () => {
     expect(getLineForWordIndex(lineMap, 0)).toBe(0);
     expect(getLineForWordIndex(lineMap, 1)).toBeGreaterThanOrEqual(1);
   });
+
+  it("uses sanitized display width when wrapping hostile terminal text", () => {
+    const words = makeWords(["safe", "\u001b[31mred", "tail"]);
+
+    const lineMap = computeLineMap(words, 12);
+
+    expect(getLineForWordIndex(lineMap, 0)).toBe(0);
+    expect(getLineForWordIndex(lineMap, 1)).toBe(0);
+    expect(getLineForWordIndex(lineMap, 2)).toBe(1);
+  });
 });
 
 describe("getLineForWordIndex", () => {
@@ -107,6 +118,19 @@ describe("getLineForWordIndex", () => {
     const lineMap = computeLineMap(words, 80);
 
     expect(getLineForWordIndex(lineMap, -1)).toBe(0);
+  });
+});
+
+describe("line stepping helpers", () => {
+  it("returns next and previous line start indices", () => {
+    const words = makeWords(["one", "two", "three", "four", "five", "six"]);
+    const lineMap = computeLineMap(words, 10);
+
+    const nextStart = getNextLineStartIndex(lineMap, 0);
+    expect(nextStart).toBeGreaterThan(0);
+
+    const previousStart = getPreviousLineStartIndex(lineMap, nextStart);
+    expect(previousStart).toBe(0);
   });
 });
 

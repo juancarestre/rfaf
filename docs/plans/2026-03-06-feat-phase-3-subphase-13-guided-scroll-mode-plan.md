@@ -195,7 +195,7 @@ Spec-flow checks incorporated into this plan:
 - [x] Tests for contracts are authored before implementation for CLI, pipeline, screen, and agent slices.
 - [x] `bun test` passes with zero failures.
 - [x] `bun x tsc --noEmit` passes.
-- [ ] PTY validation includes scroll startup, controls, resize, and cleanup checks.
+- [x] PTY validation includes scroll startup, controls, resize, and cleanup checks.
 
 ## Testing Strategy (TDD First)
 

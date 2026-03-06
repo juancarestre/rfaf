@@ -33,6 +33,12 @@ import {
 import { summarizeText } from "../llm/summarize";
 import { applyBionicMode } from "../processor/bionic";
 import { chunkWords } from "../processor/chunker";
+import {
+  computeLineMap,
+  getLastWordIndexForLine,
+  getNextLineStartIndex,
+  getPreviousLineStartIndex,
+} from "../processor/line-computation";
 import { tokenize } from "../processor/tokenizer";
 import type { Word } from "../processor/types";
 
@@ -60,6 +66,8 @@ export type AgentReaderCommand =
   | { type: "play_pause" }
   | { type: "step_next" }
   | { type: "step_prev" }
+  | { type: "step_next_line" }
+  | { type: "step_prev_line" }
   | { type: "jump_next_paragraph" }
   | { type: "jump_prev_paragraph" }
   | { type: "set_wpm_delta"; delta: number }
@@ -90,6 +98,8 @@ interface AgentSummarizeCommand {
   readingMode?: ReadingMode;
   llmConfig: Pick<LLMConfig, "provider" | "model" | "apiKey" | "timeoutMs" | "maxRetries">;
 }
+
+const AGENT_SCROLL_CONTENT_WIDTH = 78;
 
 function transformWordsForMode(words: Word[], readingMode: ReadingMode): Word[] {
   if (readingMode === "chunked") {
@@ -180,6 +190,39 @@ function syncSession(
   }
 
   return nextSession;
+}
+
+function stepReaderByLine(reader: Reader, direction: "next" | "prev"): Reader {
+  if (reader.words.length === 0 || reader.state === "finished") {
+    return reader;
+  }
+
+  const pausedReader: Reader =
+    reader.state === "playing" ? { ...reader, state: "paused" } : reader;
+  const lineMap = computeLineMap(pausedReader.words, AGENT_SCROLL_CONTENT_WIDTH);
+
+  if (direction === "next") {
+    const nextIndex = getNextLineStartIndex(lineMap, pausedReader.currentIndex);
+    if (nextIndex === pausedReader.currentIndex) {
+      return {
+        ...pausedReader,
+        currentIndex: getLastWordIndexForLine(
+          lineMap,
+          lineMap.totalLines - 1
+        ),
+      };
+    }
+
+    return {
+      ...pausedReader,
+      currentIndex: nextIndex,
+    };
+  }
+
+  return {
+    ...pausedReader,
+    currentIndex: getPreviousLineStartIndex(lineMap, pausedReader.currentIndex),
+  };
 }
 
 export function createAgentReaderRuntime(
@@ -278,6 +321,12 @@ export function executeAgentCommand(
       break;
     case "step_prev":
       nextReader = stepBackward(runtime.reader);
+      break;
+    case "step_next_line":
+      nextReader = stepReaderByLine(runtime.reader, "next");
+      break;
+    case "step_prev_line":
+      nextReader = stepReaderByLine(runtime.reader, "prev");
       break;
     case "jump_next_paragraph":
       nextReader = jumpToNextParagraph(runtime.reader);

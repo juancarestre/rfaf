@@ -6,9 +6,11 @@ import type { Word } from "../../processor/types";
 import {
   computeLineMap,
   getFirstWordIndexForLine,
+  getLastWordIndexForLine,
   getLineForWordIndex,
+  getNextLineStartIndex,
+  getPreviousLineStartIndex,
 } from "../../processor/line-computation";
-import { getLineDwellTime } from "../../processor/scroll-line-pacer";
 import {
   adjustWpm,
   advancePlayback,
@@ -16,7 +18,6 @@ import {
   jumpToNextParagraph,
   jumpToPreviousParagraph,
   restartReader,
-  stepForward,
   togglePlayPause,
   type Reader,
 } from "../../engine/reader";
@@ -32,7 +33,7 @@ import { HelpOverlay } from "../components/HelpOverlay";
 import { ProgressBar } from "../components/ProgressBar";
 import { StatusBar } from "../components/StatusBar";
 import { getTextScaleConfig, type TextScalePreset } from "../text-scale";
-import { sanitizeTerminalText } from "../sanitize-terminal-text";
+import { sanitizeTerminalText } from "../../terminal/sanitize-terminal-text";
 
 interface GuidedScrollScreenProps {
   words: Word[];
@@ -102,10 +103,10 @@ function applyReaderAndSession(
 /**
  * Build text for a single line from its constituent words.
  */
-function buildLineText(words: Word[], startIdx: number, endIdx: number): string {
+function buildLineText(words: string[], startIdx: number, endIdx: number): string {
   const parts: string[] = [];
   for (let i = startIdx; i <= endIdx && i < words.length; i++) {
-    parts.push(sanitizeTerminalText(words[i]!.text));
+    parts.push(words[i]!);
   }
   return parts.join(" ");
 }
@@ -128,7 +129,7 @@ function stepForwardByLine(reader: Reader, lineMap: ReturnType<typeof computeLin
     return { ...paused, currentIndex: lastIdx };
   }
 
-  return { ...paused, currentIndex: getFirstWordIndexForLine(lineMap, nextLine) };
+  return { ...paused, currentIndex: getNextLineStartIndex(lineMap, paused.currentIndex) };
 }
 
 /**
@@ -146,7 +147,7 @@ function stepBackwardByLine(reader: Reader, lineMap: ReturnType<typeof computeLi
     return { ...paused, currentIndex: 0 };
   }
 
-  return { ...paused, currentIndex: getFirstWordIndexForLine(lineMap, currentLine - 1) };
+  return { ...paused, currentIndex: getPreviousLineStartIndex(lineMap, paused.currentIndex) };
 }
 
 export function GuidedScrollScreen({
@@ -188,12 +189,31 @@ export function GuidedScrollScreen({
   // Account for paddingX={1} on the text container (1 char each side = 2 total)
   const textPaddingX = 1;
   const contentWidth = Math.max(1, width - textPaddingX * 2);
+  const sanitizedWords = useMemo(
+    () => words.map((word) => sanitizeTerminalText(word.text)),
+    [words]
+  );
 
   // Precomputed line map -- recomputed on resize or word change
   const lineMap = useMemo(
     () => computeLineMap(words, contentWidth),
     [words, contentWidth]
   );
+  const lineTexts = useMemo(() => {
+    const nextLineTexts: string[] = [];
+
+    for (let line = 0; line < lineMap.totalLines; line++) {
+      nextLineTexts.push(
+        buildLineText(
+          sanitizedWords,
+          getFirstWordIndexForLine(lineMap, line),
+          getLastWordIndexForLine(lineMap, line)
+        )
+      );
+    }
+
+    return nextLineTexts;
+  }, [lineMap, sanitizedWords]);
 
   const updateReader = (transform: (reader: Reader) => Reader) => {
     setReader((currentReader) => {
@@ -328,14 +348,8 @@ export function GuidedScrollScreen({
   // Build visible line elements
   const lineElements: { text: string; isCurrentLine: boolean }[] = [];
   for (let line = visibleStart; line <= visibleEnd; line++) {
-    const firstWordIdx = getFirstWordIndexForLine(lineMap, line);
-    const lastWordIdx =
-      line < lineMap.totalLines - 1
-        ? getFirstWordIndexForLine(lineMap, line + 1) - 1
-        : words.length - 1;
-
     lineElements.push({
-      text: buildLineText(words, firstWordIdx, lastWordIdx),
+      text: lineTexts[line] ?? "",
       isCurrentLine: line === currentLine,
     });
   }

@@ -45,6 +45,33 @@ describe("agent reader API scroll parity", () => {
     expect(state.readingMode).toBe("scroll");
   });
 
+  it("supports line-step commands in scroll mode", () => {
+    let runtime = createAgentReaderRuntime(
+      [
+        { text: "alpha", index: 0, paragraphIndex: 0, isParagraphStart: true, trailingPunctuation: null },
+        { text: "beta", index: 1, paragraphIndex: 0, isParagraphStart: false, trailingPunctuation: null },
+        { text: "gamma", index: 2, paragraphIndex: 0, isParagraphStart: false, trailingPunctuation: null },
+        { text: "delta", index: 3, paragraphIndex: 0, isParagraphStart: false, trailingPunctuation: null },
+        { text: "epsilon", index: 4, paragraphIndex: 0, isParagraphStart: false, trailingPunctuation: null },
+        { text: "zeta", index: 5, paragraphIndex: 0, isParagraphStart: false, trailingPunctuation: null },
+        { text: "eta", index: 6, paragraphIndex: 0, isParagraphStart: false, trailingPunctuation: null },
+        { text: "theta", index: 7, paragraphIndex: 0, isParagraphStart: false, trailingPunctuation: null },
+        { text: "iota", index: 8, paragraphIndex: 0, isParagraphStart: false, trailingPunctuation: null },
+        { text: "averyveryverylongword", index: 9, paragraphIndex: 0, isParagraphStart: false, trailingPunctuation: null },
+        { text: "kappa", index: 10, paragraphIndex: 0, isParagraphStart: false, trailingPunctuation: null },
+      ],
+      300,
+      "normal",
+      "scroll"
+    );
+
+    runtime = executeAgentCommand(runtime, { type: "step_next_line" });
+    expect(getAgentReaderState(runtime).currentIndex).toBeGreaterThan(0);
+
+    runtime = executeAgentCommand(runtime, { type: "step_prev_line" });
+    expect(getAgentReaderState(runtime).currentIndex).toBe(0);
+  });
+
   it("applies pass-through transform for scroll (words unchanged)", () => {
     let runtime = createAgentReaderRuntime(words(), 300);
     runtime = executeAgentCommand(runtime, {
