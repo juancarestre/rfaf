@@ -1,7 +1,7 @@
 ---
 title: "feat: Add Phase 3 Sub-phase 14 Runtime Mode Switching"
 type: feat
-status: active
+status: completed
 date: 2026-03-06
 origin: docs/brainstorms/2026-03-06-rfaf-phase-3-subphase-14-runtime-mode-switching-brainstorm.md
 ---
@@ -315,42 +315,42 @@ CLI parse → mode resolution → tokenize → App mount → `getWordsForMode(so
 
 ### Functional Requirements
 
-- [ ] Pressing `1` switches to RSVP mode.
-- [ ] Pressing `2` switches to chunked mode.
-- [ ] Pressing `3` switches to bionic mode.
-- [ ] Pressing `4` switches to scroll mode.
-- [ ] Same-mode re-selection (e.g., pressing `1` while in RSVP) is a no-op — no pause, no position change, no state mutation.
-- [ ] Reading position is preserved via progress-ratio mapping (within ±1 word tolerance on round-trip).
-- [ ] Playback pauses on every mode switch (reader state becomes `"paused"`).
-- [ ] WPM setting is preserved across mode switches.
-- [ ] Per-mode word caches avoid recomputation on repeated switches.
-- [ ] Cache returns identical reference on repeated access (referential equality).
+- [x] Pressing `1` switches to RSVP mode.
+- [x] Pressing `2` switches to chunked mode.
+- [x] Pressing `3` switches to bionic mode.
+- [x] Pressing `4` switches to scroll mode.
+- [x] Same-mode re-selection (e.g., pressing `1` while in RSVP) is a no-op — no pause, no position change, no state mutation.
+- [x] Reading position is preserved via progress-ratio mapping (within ±1 word tolerance on round-trip).
+- [x] Playback pauses on every mode switch (reader state becomes `"paused"`).
+- [x] WPM setting is preserved across mode switches.
+- [x] Per-mode word caches avoid recomputation on repeated switches.
+- [x] Cache returns identical reference on repeated access (referential equality).
 
 ### Screen Transition Requirements
 
-- [ ] Switching between rsvp/chunked/bionic renders RSVPScreen with updated words and mode — no unmount/mount.
-- [ ] Switching to/from scroll correctly mounts/unmounts the appropriate screen.
+- [x] Switching between rsvp/chunked/bionic renders RSVPScreen with updated words and mode — no unmount/mount.
+- [x] Switching to/from scroll correctly mounts/unmounts the appropriate screen.
 - [ ] No timer leaks or resize listener leaks on screen swap.
 - [ ] No visual flicker or blank frame during screen swap.
 
 ### Edge Case Requirements
 
-- [ ] Single-word document: mode switch works without crash (no division by zero).
-- [ ] Switch at index 0 (beginning): stays at index 0 in all modes.
-- [ ] Switch at last index: maps to last index of new array, preserves `"finished"` state.
-- [ ] Rapid switching (4 switches in <100ms): final state is consistent.
+- [x] Single-word document: mode switch works without crash (no division by zero).
+- [x] Switch at index 0 (beginning): stays at index 0 in all modes.
+- [x] Switch at last index: maps to last index of new array, preserves `"finished"` state.
+- [x] Rapid switching (4 switches in <100ms): final state is consistent.
 - [ ] Empty document guard: `createReader` already throws on empty words — mode switch never produces empty arrays since source is non-empty.
 
 ### Visual Feedback Requirements
 
-- [ ] Active mode is visible in StatusBar at all times (e.g., `[RSVP]` prefix in status line).
-- [ ] Help overlay includes `1-4` key bindings for mode switching.
-- [ ] Help overlay differentiates step behavior by mode (word-step vs line-step).
-- [ ] Initial idle message shows mode name: "Press Space to start (RSVP)", "Press Space to start (Scroll)", etc.
+- [x] Active mode is visible in StatusBar at all times (e.g., `[RSVP]` prefix in status line).
+- [x] Help overlay includes `1-4` key bindings for mode switching.
+- [x] Help overlay differentiates step behavior by mode (word-step vs line-step).
+- [x] Initial idle message shows mode name: "Press Space to start (RSVP)", "Press Space to start (Scroll)", etc.
 
 ### Session & State Requirements
 
-- [ ] Total reading time persists across mode switches (session not reset).
+- [x] Total reading time persists across mode switches (session not reset).
 - [ ] All existing key bindings continue to work after mode switch (space, h/l, j/k, p/b, r, ?, q).
 - [ ] Paragraph jump works correctly with mode-specific word arrays.
 - [ ] Speed adjustment works correctly after mode switch.
@@ -359,11 +359,11 @@ CLI parse → mode resolution → tokenize → App mount → `getWordsForMode(so
 
 ### Quality Gates (TDD-First Mandatory)
 
-- [ ] Each contract slice follows red → green → refactor before advancing.
-- [ ] Tests for contracts are authored before implementation.
-- [ ] `bun test` passes with zero failures.
-- [ ] `bun x tsc --noEmit` passes.
-- [ ] PTY validation includes mode switching, position preservation, and screen swap checks.
+- [x] Each contract slice follows red → green → refactor before advancing.
+- [x] Tests for contracts are authored before implementation.
+- [x] `bun test` passes with zero failures.
+- [x] `bun x tsc --noEmit` passes.
+- [x] PTY validation includes mode switching, position preservation, and screen swap checks.
 
 ## Testing Strategy (TDD First)
 

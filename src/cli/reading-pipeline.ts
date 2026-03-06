@@ -1,5 +1,6 @@
 import { applyBionicMode } from "../processor/bionic";
 import { chunkWords } from "../processor/chunker";
+import { transformWordsForMode } from "../processor/mode-transform";
 import { tokenize } from "../processor/tokenizer";
 import type { Word } from "../processor/types";
 import type { ReadingMode } from "./mode-option";
@@ -25,6 +26,7 @@ interface ReadingPipelineDeps {
 
 interface ReadingPipelineResult {
   words: Word[];
+  sourceWords: Word[];
   sourceLabel: string;
 }
 
@@ -62,14 +64,17 @@ export async function buildReadingPipeline(
 
   const tokenized = tokenizeFn(summaryResult.readingContent);
   const words =
-    input.mode === "chunked"
-      ? chunkFn(tokenized)
-      : input.mode === "bionic"
-        ? bionicFn(tokenized)
-        : tokenized;
+    deps.chunkFn || deps.bionicFn
+      ? input.mode === "chunked"
+        ? chunkFn(tokenized)
+        : input.mode === "bionic"
+          ? bionicFn(tokenized)
+          : tokenized
+      : transformWordsForMode(tokenized, input.mode);
 
   return {
     words,
+    sourceWords: tokenized,
     sourceLabel: summaryResult.sourceLabel,
   };
 }

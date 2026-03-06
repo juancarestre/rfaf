@@ -1,5 +1,5 @@
 ---
-status: pending
+status: completed
 priority: p3
 issue_id: 035
 tags: [code-review, architecture, quality, maintainability]
@@ -53,6 +53,7 @@ Centralize mode transform routing in a shared helper and use exhaustive switch s
 ## Work Log
 
 - 2026-03-06: Created from code-simplicity and TypeScript review synthesis.
+- 2026-03-06: Extracted shared mode transform routing into `src/processor/mode-transform.ts` and updated CLI + agent consumers.
 
 ## Resources
 

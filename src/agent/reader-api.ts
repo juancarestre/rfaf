@@ -23,16 +23,15 @@ import {
   togglePlayPause,
   type Reader,
 } from "../engine/reader";
+import { applyReaderAndSession } from "../engine/reader-session-sync";
+import { mapPositionToNewWords } from "../engine/position-mapping";
 import {
   createSession,
   markPaused,
-  markPlayStarted,
-  markWordAdvanced,
   type Session,
 } from "../engine/session";
 import { summarizeText } from "../llm/summarize";
-import { applyBionicMode } from "../processor/bionic";
-import { chunkWords } from "../processor/chunker";
+import { getWordsForMode, type ModeWordCache, transformWordsForMode } from "../processor/mode-transform";
 import {
   computeLineMap,
   getLastWordIndexForLine,
@@ -49,8 +48,6 @@ interface AgentSummaryContext {
   model: string | null;
   sourceLabel: string | null;
 }
-
-type ModeWordCache = Partial<Record<ReadingMode, Word[]>>;
 
 export interface AgentReaderRuntime {
   reader: Reader;
@@ -101,18 +98,6 @@ interface AgentSummarizeCommand {
 
 const AGENT_SCROLL_CONTENT_WIDTH = 78;
 
-function transformWordsForMode(words: Word[], readingMode: ReadingMode): Word[] {
-  if (readingMode === "chunked") {
-    return chunkWords(words);
-  }
-
-  if (readingMode === "bionic") {
-    return applyBionicMode(words);
-  }
-
-  return words;
-}
-
 function isReadingMode(value: string): value is ReadingMode {
   return READING_MODES.includes(value as ReadingMode);
 }
@@ -130,26 +115,6 @@ function requireReadingMode(value: unknown, context: string): ReadingMode {
   return normalized;
 }
 
-function getWordsForMode(
-  sourceWords: Word[],
-  readingMode: ReadingMode,
-  modeWordCache: ModeWordCache
-): { words: Word[]; modeWordCache: ModeWordCache } {
-  const cached = modeWordCache[readingMode];
-  if (cached) {
-    return { words: cached, modeWordCache };
-  }
-
-  const transformedWords = transformWordsForMode(sourceWords, readingMode);
-  return {
-    words: transformedWords,
-    modeWordCache: {
-      ...modeWordCache,
-      [readingMode]: transformedWords,
-    },
-  };
-}
-
 function buildSummarySourceLabel(
   sourceLabel: string,
   preset: SummaryPreset,
@@ -157,39 +122,6 @@ function buildSummarySourceLabel(
 ): string {
   const base = `${sourceLabel} (summary:${preset})`;
   return readingMode === "rsvp" ? base : `${base} [${readingMode}]`;
-}
-
-function syncSession(
-  currentReader: Reader,
-  currentSession: Session,
-  nextReader: Reader,
-  nowMs: number
-): Session {
-  let nextSession = currentSession;
-
-  if (currentReader.state !== "playing" && nextReader.state === "playing") {
-    nextSession = markPlayStarted(nextSession, nowMs);
-  }
-
-  if (currentReader.state === "playing" && nextReader.state !== "playing") {
-    nextSession = markPaused(nextSession, nowMs);
-  }
-
-  if (
-    currentReader.state === "playing" &&
-    nextReader.currentIndex > currentReader.currentIndex
-  ) {
-    const steps = nextReader.currentIndex - currentReader.currentIndex;
-    for (let i = 0; i < steps; i++) {
-      nextSession = markWordAdvanced(nextSession);
-    }
-  }
-
-  if (nextSession.currentWpm !== nextReader.currentWpm) {
-    nextSession = { ...nextSession, currentWpm: nextReader.currentWpm };
-  }
-
-  return nextSession;
 }
 
 function stepReaderByLine(reader: Reader, direction: "next" | "prev"): Reader {
@@ -354,17 +286,15 @@ export function executeAgentCommand(
       );
       const currentWpm = runtime.reader.currentWpm;
       const baseReader = createReader(transformedWords, currentWpm);
-      const progressRatio =
-        runtime.reader.words.length <= 1
-          ? 0
-          : runtime.reader.currentIndex / (runtime.reader.words.length - 1);
-      const targetIndex =
-        transformedWords.length <= 1
-          ? 0
-          : Math.min(
-              transformedWords.length - 1,
-              Math.round(progressRatio * (transformedWords.length - 1))
-            );
+      const targetIndex = mapPositionToNewWords(
+        runtime.reader.currentIndex,
+        runtime.reader.words,
+        transformedWords
+      );
+      let session = runtime.session;
+      if (runtime.reader.state === "playing") {
+        session = markPaused(session, nowMs);
+      }
 
       return {
         ...runtime,
@@ -373,7 +303,7 @@ export function executeAgentCommand(
           currentIndex: targetIndex,
           state: runtime.reader.state === "finished" ? "finished" : "paused",
         },
-        session: createSession(currentWpm),
+        session,
         readingMode,
         modeWordCache,
       };
@@ -397,7 +327,7 @@ export function executeAgentCommand(
 
   return {
     reader: nextReader,
-    session: syncSession(runtime.reader, runtime.session, nextReader, nowMs),
+    session: applyReaderAndSession(runtime.reader, runtime.session, nextReader, nowMs),
     textScale: runtime.textScale,
     readingMode: runtime.readingMode,
     sourceWords: runtime.sourceWords,

@@ -15,12 +15,9 @@ import {
   togglePlayPause,
   type Reader,
 } from "../../engine/reader";
+import { applyReaderAndSession } from "../../engine/reader-session-sync";
 import {
   createSession,
-  finishSession,
-  markPaused,
-  markPlayStarted,
-  markWordAdvanced,
   type Session,
 } from "../../engine/session";
 import { HelpOverlay } from "../components/HelpOverlay";
@@ -35,6 +32,13 @@ interface RSVPScreenProps {
   sourceLabel: string;
   textScale: TextScalePreset;
   mode: ReadingMode;
+  reader?: Reader;
+  session?: Session;
+  updateReader?: (transform: (reader: Reader) => Reader) => void;
+  onRestart?: () => void;
+  helpVisible?: boolean;
+  onHelpVisibleChange?: (helpVisible: boolean) => void;
+  onQuit?: () => void;
 }
 
 export function getReadingLaneLayout(_: TextScalePreset): {
@@ -99,49 +103,19 @@ export function getRemainingSeconds(
   return lookup[targetIndex] ?? 0;
 }
 
-function applyReaderAndSession(
-  currentReader: Reader,
-  currentSession: Session,
-  nextReader: Reader
-): Session {
-  const now = Date.now();
-  let nextSession = currentSession;
-
-  if (currentReader.state !== "playing" && nextReader.state === "playing") {
-    nextSession = markPlayStarted(nextSession, now);
-  }
-
-  if (currentReader.state === "playing" && nextReader.state !== "playing") {
-    nextSession = markPaused(nextSession, now);
-  }
-
-  if (
-    currentReader.state === "playing" &&
-    nextReader.currentIndex > currentReader.currentIndex
-  ) {
-    const steps = nextReader.currentIndex - currentReader.currentIndex;
-    for (let i = 0; i < steps; i++) {
-      nextSession = markWordAdvanced(nextSession);
-    }
-  }
-
-  if (nextSession.currentWpm !== nextReader.currentWpm) {
-    nextSession = { ...nextSession, currentWpm: nextReader.currentWpm };
-  }
-
-  if (currentReader.state !== "finished" && nextReader.state === "finished") {
-    nextSession = finishSession(nextSession, now);
-  }
-
-  return nextSession;
-}
-
 export function RSVPScreen({
   words,
   initialWpm,
   sourceLabel,
   textScale,
   mode,
+  reader,
+  session,
+  updateReader,
+  onRestart,
+  helpVisible,
+  onHelpVisibleChange,
+  onQuit,
 }: RSVPScreenProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
@@ -149,11 +123,14 @@ export function RSVPScreen({
     width: stdout.columns ?? 80,
     height: stdout.rows ?? 24,
   }));
-  const [reader, setReader] = useState(() => createReader(words, initialWpm));
-  const [session, setSession] = useState(() => createSession(initialWpm));
-  const [helpVisible, setHelpVisible] = useState(false);
+  const [localReader, setLocalReader] = useState(() => createReader(words, initialWpm));
+  const [localSession, setLocalSession] = useState(() => createSession(initialWpm));
+  const [localHelpVisible, setLocalHelpVisible] = useState(false);
   const textScaleConfig = getTextScaleConfig(textScale);
   const readingLaneLayout = getReadingLaneLayout(textScale);
+  const activeReader = reader ?? localReader;
+  const activeSession = session ?? localSession;
+  const activeHelpVisible = helpVisible ?? localHelpVisible;
 
   useEffect(() => {
     const onResize = () => {
@@ -174,138 +151,156 @@ export function RSVPScreen({
 
   const tooSmall = width < 40 || height < 8;
 
-  const updateReader = (transform: (reader: Reader) => Reader) => {
-    setReader((currentReader) => {
+  const applyReaderUpdate = (transform: (reader: Reader) => Reader) => {
+    if (updateReader) {
+      updateReader(transform);
+      return;
+    }
+
+    setLocalReader((currentReader) => {
       const nextReader = transform(currentReader);
-      setSession((currentSession) =>
+      setLocalSession((currentSession) =>
         applyReaderAndSession(currentReader, currentSession, nextReader)
       );
       return nextReader;
     });
   };
 
-  useEffect(() => {
-    if (tooSmall && reader.state === "playing") {
-      updateReader(togglePlayPause);
+  const setActiveHelpVisible = (visible: boolean) => {
+    if (onHelpVisibleChange) {
+      onHelpVisibleChange(visible);
+      return;
     }
-  }, [tooSmall, reader.state]);
+
+    setLocalHelpVisible(visible);
+  };
 
   useEffect(() => {
-    if (reader.state !== "playing" || helpVisible || tooSmall) return;
+    if (tooSmall && activeReader.state === "playing") {
+      applyReaderUpdate(togglePlayPause);
+    }
+  }, [activeReader.state, tooSmall]);
 
-    const word = words[reader.currentIndex];
+  useEffect(() => {
+    if (activeReader.state !== "playing" || activeHelpVisible || tooSmall) return;
+
+    const word = words[activeReader.currentIndex];
     if (!word) return;
 
-    const delay = Math.max(1, Math.round(getDisplayTime(word, reader.currentWpm)));
+    const delay = Math.max(1, Math.round(getDisplayTime(word, activeReader.currentWpm)));
     const timer = setTimeout(() => {
-      updateReader(advancePlayback);
+      applyReaderUpdate(advancePlayback);
     }, delay);
 
     return () => clearTimeout(timer);
   }, [
-    helpVisible,
-    reader.currentIndex,
-    reader.currentWpm,
-    reader.state,
+    activeHelpVisible,
+    activeReader.currentIndex,
+    activeReader.currentWpm,
+    activeReader.state,
     tooSmall,
     words,
   ]);
 
   useInput((input, key) => {
     if (input === "q") {
-      exit();
+      (onQuit ?? exit)();
       return;
     }
 
-    if (helpVisible) {
+    if (activeHelpVisible) {
       if (input === "?" || key.escape) {
-        setHelpVisible(false);
+        setActiveHelpVisible(false);
       }
       return;
     }
 
     if (input === "?") {
-      if (reader.state === "playing") {
-        updateReader(togglePlayPause);
+      if (activeReader.state === "playing") {
+        applyReaderUpdate(togglePlayPause);
       }
-      setHelpVisible(true);
+      setActiveHelpVisible(true);
       return;
     }
 
     if (input === " ") {
-      updateReader(togglePlayPause);
+      applyReaderUpdate(togglePlayPause);
       return;
     }
 
     if (input === "r") {
-      setReader((currentReader) => {
-        const restarted = restartReader(currentReader);
-        setSession(createSession(restarted.currentWpm));
-        return restarted;
-      });
+      if (onRestart) {
+        onRestart();
+      } else {
+        setLocalReader((currentReader) => {
+          const restarted = restartReader(currentReader);
+          setLocalSession(createSession(restarted.currentWpm));
+          return restarted;
+        });
+      }
       return;
     }
 
     if (input === "l" || key.rightArrow) {
-      updateReader(stepForward);
+      applyReaderUpdate(stepForward);
       return;
     }
 
     if (input === "h" || key.leftArrow) {
-      updateReader(stepBackward);
+      applyReaderUpdate(stepBackward);
       return;
     }
 
     if (input === "k" || key.upArrow) {
-      updateReader((currentReader) => adjustWpm(currentReader, 25));
+      applyReaderUpdate((currentReader) => adjustWpm(currentReader, 25));
       return;
     }
 
     if (input === "j" || key.downArrow) {
-      updateReader((currentReader) => adjustWpm(currentReader, -25));
+      applyReaderUpdate((currentReader) => adjustWpm(currentReader, -25));
       return;
     }
 
     if (input === "p") {
-      updateReader(jumpToNextParagraph);
+      applyReaderUpdate(jumpToNextParagraph);
       return;
     }
 
     if (input === "b") {
-      updateReader(jumpToPreviousParagraph);
+      applyReaderUpdate(jumpToPreviousParagraph);
     }
   });
 
-  const currentWordEntry = words[reader.currentIndex];
+  const currentWordEntry = words[activeReader.currentIndex];
   const currentWord = currentWordEntry?.text ?? "";
   const progress = useMemo(() => {
     if (words.length <= 1) return 1;
-    return reader.currentIndex / (words.length - 1);
-  }, [reader.currentIndex, words.length]);
+    return activeReader.currentIndex / (words.length - 1);
+  }, [activeReader.currentIndex, words.length]);
 
   const remainingSecondsLookup = useMemo(
-    () => buildRemainingSecondsLookup(words, reader.currentWpm),
-    [reader.currentWpm, words]
+    () => buildRemainingSecondsLookup(words, activeReader.currentWpm),
+    [activeReader.currentWpm, words]
   );
   const remainingSeconds =
     remainingSecondsLookup[
-      Math.min(words.length, Math.max(0, reader.currentIndex + 1))
+      Math.min(words.length, Math.max(0, activeReader.currentIndex + 1))
     ] ?? 0;
 
   const stateLabel = useMemo(() => {
-    if (reader.state === "finished") {
-      const readMs = getLiveReadingTimeMs(session);
+    if (activeReader.state === "finished") {
+      const readMs = getLiveReadingTimeMs(activeSession);
       const totalSeconds = Math.round(readMs / 1000);
-      const wordsRead = Math.max(session.wordsRead, reader.currentIndex + 1);
+      const wordsRead = Math.max(activeSession.wordsRead, activeReader.currentIndex + 1);
       const avgWpm =
-        readMs > 0 ? Math.round(wordsRead / (readMs / 60_000)) : session.averageWpm;
+        readMs > 0 ? Math.round(wordsRead / (readMs / 60_000)) : activeSession.averageWpm;
       return `Done (${wordsRead} words, ${totalSeconds}s, avg ${avgWpm} WPM)`;
     }
 
     if (
-      reader.state === "paused" &&
-      reader.currentIndex === 0 &&
-      session.startTimeMs === null
+      activeReader.state === "paused" &&
+      activeReader.currentIndex === 0 &&
+      activeSession.startTimeMs === null
     ) {
       if (mode === "chunked") {
         return "Press Space to start (Chunked)";
@@ -315,13 +310,13 @@ export function RSVPScreen({
         return "Press Space to start (Bionic)";
       }
 
-      return "Press Space to start";
+      return "Press Space to start (RSVP)";
     }
 
-    if (reader.state === "paused") return "Paused";
-    if (reader.state === "playing") return "Playing";
+    if (activeReader.state === "paused") return "Paused";
+    if (activeReader.state === "playing") return "Playing";
     return "Idle";
-  }, [mode, reader.currentIndex, reader.state, session]);
+  }, [activeReader.currentIndex, activeReader.state, activeSession, mode]);
 
   return (
     <Box flexDirection="column" width={width} height={height} alignItems="flex-start">
@@ -337,10 +332,11 @@ export function RSVPScreen({
             justifyContent={readingLaneLayout.justifyContent}
             alignItems={readingLaneLayout.alignItems}
           >
-            {helpVisible ? (
+            {activeHelpVisible ? (
               <HelpOverlay
                 paddingX={textScaleConfig.helpPaddingX}
                 paddingY={textScaleConfig.helpPaddingY}
+                mode={mode}
               />
             ) : (
               <WordDisplay
@@ -358,11 +354,12 @@ export function RSVPScreen({
           </Box>
           <ProgressBar progress={progress} width={40} />
           <StatusBar
-            wpm={reader.currentWpm}
+            wpm={activeReader.currentWpm}
             remainingSeconds={remainingSeconds}
             progress={progress}
             stateLabel={stateLabel}
             sourceLabel={sourceLabel}
+            activeMode={mode}
             dimColor={textScaleConfig.statusDim}
             separator={textScaleConfig.statusSeparator}
           />

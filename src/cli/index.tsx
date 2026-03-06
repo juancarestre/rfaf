@@ -256,7 +256,7 @@ async function main() {
     mode,
   });
 
-  const words = readingPipeline.words;
+  const sourceWords = readingPipeline.sourceWords;
   const sourceLabel = readingPipeline.sourceLabel;
 
   await runSessionLifecycle({
@@ -267,11 +267,11 @@ async function main() {
     renderApp: (stdin) =>
       render(
         <App
-          words={words}
+          sourceWords={sourceWords}
           initialWpm={wpm}
           sourceLabel={sourceLabel}
           textScale={textScale}
-          mode={mode}
+          initialMode={mode}
         />,
         {
           stdin,

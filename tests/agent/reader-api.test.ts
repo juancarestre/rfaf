@@ -266,6 +266,37 @@ describe("agent reader api", () => {
     expect(runtime.reader.words).toBe(firstBionicWords);
   });
 
+  it("preserves session accounting when switching modes through the agent API", () => {
+    let runtime = createAgentReaderRuntime(words(), 300);
+    runtime = {
+      ...runtime,
+      reader: {
+        ...runtime.reader,
+        currentIndex: 1,
+        state: "playing",
+      },
+      session: {
+        ...runtime.session,
+        startTimeMs: 1_000,
+        lastPlayStartMs: 1_000,
+        wordsRead: 1,
+      },
+    };
+
+    runtime = executeAgentCommand(
+      runtime,
+      {
+        type: "set_reading_mode",
+        readingMode: "chunked",
+      },
+      1_500
+    );
+
+    expect(runtime.session.wordsRead).toBe(1);
+    expect(runtime.session.totalReadingTimeMs).toBe(500);
+    expect(runtime.reader.state).toBe("paused");
+  });
+
   it("resets mode cache when source corpus changes via summarize", async () => {
     let runtime = createAgentReaderRuntime(words(), 300);
     runtime = executeAgentCommand(runtime, {
