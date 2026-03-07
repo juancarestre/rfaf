@@ -97,9 +97,13 @@ export function applyAppModeInput(
   nowMs = Date.now()
 ): AppRuntimeState {
   const nextMode = getReadingModeForInput(input);
-  if (nextMode === null || runtime.helpVisible) {
+  if (nextMode !== null) {
+    return switchAppReadingMode(runtime, sourceWords, nextMode, nowMs);
+  }
+
+  if (runtime.helpVisible) {
     return runtime;
   }
 
-  return switchAppReadingMode(runtime, sourceWords, nextMode, nowMs);
+  return runtime;
 }

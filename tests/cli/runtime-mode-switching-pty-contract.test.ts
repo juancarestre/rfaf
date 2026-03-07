@@ -128,19 +128,16 @@ describe("runtime mode switching PTY contract", () => {
     expect(result.output).toContain("The quick brown fox jumps over the lazy dog.");
   });
 
-  it("supports help overlay with mode bindings and rapid switching", () => {
+  it("supports help overlay mode switching without closing help first", () => {
     const result = runRuntimeModePty([
       "help",
-      "close-help",
-      "mode-rsvp",
-      "mode-chunked",
-      "mode-bionic",
       "mode-scroll",
       "quit",
     ]);
 
     expect(result.exitCode).toBe(0);
     expect(result.output).toContain("1-4        switch mode");
+    expect(result.output).toContain("step forward (line)");
     expect(result.output).toContain("[Scroll]");
   });
 });

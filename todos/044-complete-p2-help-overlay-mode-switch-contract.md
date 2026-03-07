@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p2
 issue_id: "044"
 tags: [code-review, quality, ui, ux]
@@ -73,7 +73,7 @@ The help overlay tells users `1-4` switches reading modes, but the app currently
 
 ## Recommended Action
 
-**To be filled during triage.**
+Allow `1-4` mode hotkeys to work while help is visible so the overlay copy matches the actual input contract. Keep help open across the switch and verify the behavior with PTY and runtime integration coverage.
 
 ## Technical Details
 
@@ -94,9 +94,9 @@ The help overlay tells users `1-4` switches reading modes, but the app currently
 
 ## Acceptance Criteria
 
-- [ ] Help overlay behavior and copy are aligned
-- [ ] PTY or integration coverage verifies the chosen contract
-- [ ] No existing help-overlay controls regress
+- [x] Help overlay behavior and copy are aligned
+- [x] PTY or integration coverage verifies the chosen contract
+- [x] No existing help-overlay controls regress
 
 ## Work Log
 
@@ -110,6 +110,18 @@ The help overlay tells users `1-4` switches reading modes, but the app currently
 
 **Learnings:**
 - The issue is user-facing contract clarity, not a crash or security problem
+
+### 2026-03-07 - Resolution
+
+**By:** OpenCode
+
+**Actions:**
+- Updated App runtime input handling so `1-4` mode keys still switch modes while help is visible in `src/ui/runtime-mode-state.ts`
+- Verified the overlay remains accurate after switching modes via `tests/ui/mode-switching-integration.test.ts`
+- Added PTY coverage for help-overlay switching in `tests/cli/runtime-mode-switching-pty-contract.test.ts`
+
+**Learnings:**
+- Letting mode hotkeys bypass the help guard preserves modal behavior for other keys while aligning the documented contract
 
 ## Notes
 

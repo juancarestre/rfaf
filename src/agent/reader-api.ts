@@ -34,6 +34,7 @@ import { summarizeText } from "../llm/summarize";
 import { getWordsForMode, type ModeWordCache, transformWordsForMode } from "../processor/mode-transform";
 import {
   computeLineMap,
+  type LineMap,
   getLastWordIndexForLine,
   getNextLineStartIndex,
   getPreviousLineStartIndex,
@@ -49,6 +50,12 @@ interface AgentSummaryContext {
   sourceLabel: string | null;
 }
 
+interface AgentLineMapCache {
+  contentWidth: number;
+  words: Word[];
+  lineMap: LineMap;
+}
+
 export interface AgentReaderRuntime {
   reader: Reader;
   session: Session;
@@ -56,6 +63,7 @@ export interface AgentReaderRuntime {
   readingMode: ReadingMode;
   sourceWords: Word[];
   modeWordCache: ModeWordCache;
+  lineMapCache: AgentLineMapCache | null;
   summary: AgentSummaryContext;
 }
 
@@ -63,8 +71,8 @@ export type AgentReaderCommand =
   | { type: "play_pause" }
   | { type: "step_next" }
   | { type: "step_prev" }
-  | { type: "step_next_line" }
-  | { type: "step_prev_line" }
+  | { type: "step_next_line"; contentWidth?: number }
+  | { type: "step_prev_line"; contentWidth?: number }
   | { type: "jump_next_paragraph" }
   | { type: "jump_prev_paragraph" }
   | { type: "set_wpm_delta"; delta: number }
@@ -124,14 +132,39 @@ function buildSummarySourceLabel(
   return readingMode === "rsvp" ? base : `${base} [${readingMode}]`;
 }
 
-function stepReaderByLine(reader: Reader, direction: "next" | "prev"): Reader {
+function getCachedLineMap(
+  runtime: AgentReaderRuntime,
+  contentWidth: number
+): { lineMap: LineMap; lineMapCache: AgentLineMapCache } {
+  if (
+    runtime.lineMapCache &&
+    runtime.lineMapCache.words === runtime.reader.words &&
+    runtime.lineMapCache.contentWidth === contentWidth
+  ) {
+    return {
+      lineMap: runtime.lineMapCache.lineMap,
+      lineMapCache: runtime.lineMapCache,
+    };
+  }
+
+  const lineMap = computeLineMap(runtime.reader.words, contentWidth);
+  return {
+    lineMap,
+    lineMapCache: {
+      words: runtime.reader.words,
+      contentWidth,
+      lineMap,
+    },
+  };
+}
+
+function stepReaderByLine(reader: Reader, lineMap: LineMap, direction: "next" | "prev"): Reader {
   if (reader.words.length === 0 || reader.state === "finished") {
     return reader;
   }
 
   const pausedReader: Reader =
     reader.state === "playing" ? { ...reader, state: "paused" } : reader;
-  const lineMap = computeLineMap(pausedReader.words, AGENT_SCROLL_CONTENT_WIDTH);
 
   if (direction === "next") {
     const nextIndex = getNextLineStartIndex(lineMap, pausedReader.currentIndex);
@@ -177,6 +210,7 @@ export function createAgentReaderRuntime(
     readingMode,
     sourceWords,
     modeWordCache,
+    lineMapCache: null,
     summary: {
       enabled: false,
       preset: DEFAULT_SUMMARY_PRESET,
@@ -223,6 +257,7 @@ export async function executeAgentSummarizeCommand(
     readingMode,
     sourceWords: summaryWords,
     modeWordCache,
+    lineMapCache: null,
     summary: {
       enabled: true,
       preset: command.preset,
@@ -243,6 +278,7 @@ export function executeAgentCommand(
   nowMs = Date.now()
 ): AgentReaderRuntime {
   let nextReader: Reader;
+  let nextLineMapCache = runtime.lineMapCache;
 
   switch (command.type) {
     case "play_pause":
@@ -255,10 +291,18 @@ export function executeAgentCommand(
       nextReader = stepBackward(runtime.reader);
       break;
     case "step_next_line":
-      nextReader = stepReaderByLine(runtime.reader, "next");
+      ({ lineMapCache: nextLineMapCache } = getCachedLineMap(
+        runtime,
+        command.contentWidth ?? AGENT_SCROLL_CONTENT_WIDTH
+      ));
+      nextReader = stepReaderByLine(runtime.reader, nextLineMapCache.lineMap, "next");
       break;
     case "step_prev_line":
-      nextReader = stepReaderByLine(runtime.reader, "prev");
+      ({ lineMapCache: nextLineMapCache } = getCachedLineMap(
+        runtime,
+        command.contentWidth ?? AGENT_SCROLL_CONTENT_WIDTH
+      ));
+      nextReader = stepReaderByLine(runtime.reader, nextLineMapCache.lineMap, "prev");
       break;
     case "jump_next_paragraph":
       nextReader = jumpToNextParagraph(runtime.reader);
@@ -279,6 +323,10 @@ export function executeAgentCommand(
         command.readingMode,
         "set_reading_mode command"
       );
+      if (readingMode === runtime.readingMode) {
+        return runtime;
+      }
+
       const { words: transformedWords, modeWordCache } = getWordsForMode(
         runtime.sourceWords,
         readingMode,
@@ -306,6 +354,7 @@ export function executeAgentCommand(
         session,
         readingMode,
         modeWordCache,
+        lineMapCache: null,
       };
     }
     case "restart":
@@ -317,6 +366,7 @@ export function executeAgentCommand(
         readingMode: runtime.readingMode,
         sourceWords: runtime.sourceWords,
         modeWordCache: runtime.modeWordCache,
+        lineMapCache: runtime.lineMapCache,
         summary: runtime.summary,
       };
     default: {
@@ -332,6 +382,7 @@ export function executeAgentCommand(
     readingMode: runtime.readingMode,
     sourceWords: runtime.sourceWords,
     modeWordCache: runtime.modeWordCache,
+    lineMapCache: nextReader.words === runtime.reader.words ? nextLineMapCache : null,
     summary: runtime.summary,
   };
 }

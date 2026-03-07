@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p2
 issue_id: "045"
 tags: [code-review, agent, parity, quality]
@@ -54,7 +54,7 @@ The TUI treats selecting the current reading mode as a true no-op, but the agent
 
 ## Recommended Action
 
-**To be filled during triage.**
+Mirror the TUI no-op semantics in the agent runtime by returning the existing runtime unchanged when `set_reading_mode` requests the already-active mode.
 
 ## Technical Details
 
@@ -73,9 +73,9 @@ The TUI treats selecting the current reading mode as a true no-op, but the agent
 
 ## Acceptance Criteria
 
-- [ ] Agent `set_reading_mode` is a no-op when the requested mode is already active
-- [ ] Regression test covers same-mode agent switch behavior
-- [ ] TUI and agent semantics match for this case
+- [x] Agent `set_reading_mode` is a no-op when the requested mode is already active
+- [x] Regression test covers same-mode agent switch behavior
+- [x] TUI and agent semantics match for this case
 
 ## Work Log
 
@@ -89,3 +89,14 @@ The TUI treats selecting the current reading mode as a true no-op, but the agent
 
 **Learnings:**
 - This is a semantics mismatch, not a transform or session-accounting bug
+
+### 2026-03-07 - Resolution
+
+**By:** OpenCode
+
+**Actions:**
+- Added an early return in `src/agent/reader-api.ts` when the requested mode already matches `runtime.readingMode`
+- Added regression coverage in `tests/agent/reader-api.test.ts`
+
+**Learnings:**
+- This fix is self-contained and keeps agent semantics aligned with the App runtime helper

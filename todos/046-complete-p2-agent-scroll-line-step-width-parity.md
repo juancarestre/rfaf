@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p2
 issue_id: "046"
 tags: [code-review, agent, parity, ui]
@@ -72,7 +72,7 @@ The agent API uses a hardcoded content width for scroll line stepping, while the
 
 ## Recommended Action
 
-**To be filled during triage.**
+Make agent line-step commands accept an optional `contentWidth` so callers can request TUI-equivalent viewport behavior, while keeping a default width for existing callers.
 
 ## Technical Details
 
@@ -92,9 +92,9 @@ The agent API uses a hardcoded content width for scroll line stepping, while the
 
 ## Acceptance Criteria
 
-- [ ] Agent scroll line stepping has an explicit parity contract relative to TUI width
-- [ ] Tests cover the chosen behavior
-- [ ] Documentation/comments are updated if parity remains approximate
+- [x] Agent scroll line stepping has an explicit parity contract relative to TUI width
+- [x] Tests cover the chosen behavior
+- [x] Documentation/comments are updated if parity remains approximate
 
 ## Work Log
 
@@ -108,3 +108,15 @@ The agent API uses a hardcoded content width for scroll line stepping, while the
 
 **Learnings:**
 - This is specifically a parity/contract issue, not a correctness bug in the TUI itself
+
+### 2026-03-07 - Resolution
+
+**By:** OpenCode
+
+**Actions:**
+- Expanded `AgentReaderCommand` line-step variants to accept optional `contentWidth` in `src/agent/reader-api.ts`
+- Updated the agent line-step path to compute line maps using caller-provided width when present
+- Added width-sensitive parity coverage in `tests/agent/reader-api-scroll-parity.test.ts`
+
+**Learnings:**
+- Optional viewport width keeps the agent surface backward-compatible while making parity explicit

@@ -72,6 +72,48 @@ describe("agent reader API scroll parity", () => {
     expect(getAgentReaderState(runtime).currentIndex).toBe(0);
   });
 
+  it("accepts viewport content width for line-step parity", () => {
+    const words = [
+      { text: "alpha", index: 0, paragraphIndex: 0, isParagraphStart: true, trailingPunctuation: null },
+      { text: "beta", index: 1, paragraphIndex: 0, isParagraphStart: false, trailingPunctuation: null },
+      { text: "gamma", index: 2, paragraphIndex: 0, isParagraphStart: false, trailingPunctuation: null },
+      { text: "delta", index: 3, paragraphIndex: 0, isParagraphStart: false, trailingPunctuation: null },
+      { text: "epsilon", index: 4, paragraphIndex: 0, isParagraphStart: false, trailingPunctuation: null },
+      { text: "zeta", index: 5, paragraphIndex: 0, isParagraphStart: false, trailingPunctuation: null },
+    ] satisfies Word[];
+
+    const narrow = executeAgentCommand(
+      createAgentReaderRuntime(words, 300, "normal", "scroll"),
+      { type: "step_next_line", contentWidth: 10 }
+    );
+    const wide = executeAgentCommand(
+      createAgentReaderRuntime(words, 300, "normal", "scroll"),
+      { type: "step_next_line", contentWidth: 80 }
+    );
+
+    expect(getAgentReaderState(narrow).currentIndex).toBeLessThan(
+      getAgentReaderState(wide).currentIndex
+    );
+  });
+
+  it("reuses cached line maps across repeated line-step commands", () => {
+    let runtime = createAgentReaderRuntime(words(), 300, "normal", "scroll");
+
+    runtime = executeAgentCommand(runtime, { type: "step_next_line", contentWidth: 20 });
+    const firstLineMapCache = runtime.lineMapCache;
+
+    runtime = executeAgentCommand(runtime, { type: "step_prev_line", contentWidth: 20 });
+
+    expect(runtime.lineMapCache).toBe(firstLineMapCache);
+
+    runtime = executeAgentCommand(runtime, {
+      type: "set_reading_mode",
+      readingMode: "chunked",
+    });
+
+    expect(runtime.lineMapCache).toBeNull();
+  });
+
   it("applies pass-through transform for scroll (words unchanged)", () => {
     let runtime = createAgentReaderRuntime(words(), 300);
     runtime = executeAgentCommand(runtime, {

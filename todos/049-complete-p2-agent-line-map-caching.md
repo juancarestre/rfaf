@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p2
 issue_id: "049"
 tags: [code-review, performance, agent]
@@ -53,7 +53,7 @@ The agent API recomputes the full scroll line map on every line-step command, ev
 
 ## Recommended Action
 
-**To be filled during triage.**
+Cache computed scroll line maps on the agent runtime keyed by `reader.words` identity and `contentWidth`, and invalidate the cache when mode/source words change.
 
 ## Technical Details
 
@@ -71,9 +71,9 @@ The agent API recomputes the full scroll line map on every line-step command, ev
 
 ## Acceptance Criteria
 
-- [ ] Repeated agent line-step commands do not recompute the full line map unnecessarily
-- [ ] Cache invalidates correctly when reader words change
-- [ ] Existing scroll parity tests still pass
+- [x] Repeated agent line-step commands do not recompute the full line map unnecessarily
+- [x] Cache invalidates correctly when reader words change
+- [x] Existing scroll parity tests still pass
 
 ## Work Log
 
@@ -86,3 +86,15 @@ The agent API recomputes the full scroll line map on every line-step command, ev
 
 **Learnings:**
 - This is isolated to the agent scroll stepping path; TUI has a separate render-time cost profile
+
+### 2026-03-07 - Resolution
+
+**By:** OpenCode
+
+**Actions:**
+- Added `lineMapCache` to `AgentReaderRuntime` in `src/agent/reader-api.ts`
+- Reused cached line maps across repeated agent line-step commands when `reader.words` and `contentWidth` are unchanged
+- Invalidated cache on mode/source-word changes and added regression coverage in `tests/agent/reader-api-scroll-parity.test.ts`
+
+**Learnings:**
+- Runtime-owned line-map caching was simpler than introducing a separate memoization layer for the agent path

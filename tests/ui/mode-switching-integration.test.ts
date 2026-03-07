@@ -82,13 +82,17 @@ describe("mode switching integration", () => {
     expect(runtime.reader.state).toBe("paused");
   });
 
-  it("blocks mode input while help is visible", () => {
+  it("allows mode input while help is visible so help copy matches behavior", () => {
     const sourceWords = makeWords();
     const runtime = {
       ...createAppRuntimeState(sourceWords, "rsvp", 300),
       helpVisible: true,
     };
 
-    expect(applyAppModeInput(runtime, sourceWords, "4", 1_000)).toBe(runtime);
+    const nextRuntime = applyAppModeInput(runtime, sourceWords, "4", 1_000);
+
+    expect(nextRuntime).not.toBe(runtime);
+    expect(nextRuntime.activeMode).toBe("scroll");
+    expect(nextRuntime.helpVisible).toBe(true);
   });
 });

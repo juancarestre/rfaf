@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p2
 issue_id: "047"
 tags: [code-review, performance, ui, ink]
@@ -72,7 +72,7 @@ Guided scroll currently sanitizes every word, computes the full line map, and ma
 
 ## Recommended Action
 
-**To be filled during triage.**
+Stop eagerly materializing text for every scroll line. Keep full line-map computation, but build rendered line text only for the currently visible window.
 
 ## Technical Details
 
@@ -91,9 +91,9 @@ Guided scroll currently sanitizes every word, computes the full line map, and ma
 
 ## Acceptance Criteria
 
-- [ ] Guided scroll avoids eagerly building text for non-visible lines or otherwise proves performance is acceptable
-- [ ] Existing guided-scroll rendering and highlight alignment tests still pass
-- [ ] No regressions in line-wrap parity with rendered content
+- [x] Guided scroll avoids eagerly building text for non-visible lines or otherwise proves performance is acceptable
+- [x] Existing guided-scroll rendering and highlight alignment tests still pass
+- [x] No regressions in line-wrap parity with rendered content
 
 ## Work Log
 
@@ -107,3 +107,15 @@ Guided scroll currently sanitizes every word, computes the full line map, and ma
 
 **Learnings:**
 - This is a responsiveness concern, not an immediate correctness or security defect
+
+### 2026-03-07 - Resolution
+
+**By:** OpenCode
+
+**Actions:**
+- Replaced eager `lineTexts` generation with visible-window-only line materialization in `src/ui/screens/GuidedScrollScreen.tsx`
+- Kept sanitized-word and line-map memoization intact so rendering stays aligned with measured content
+- Verified no layout regressions via the full UI test suite
+
+**Learnings:**
+- Building text only for visible lines captures most of the benefit without introducing another cache layer

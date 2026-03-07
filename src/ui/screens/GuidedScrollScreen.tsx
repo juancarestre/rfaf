@@ -176,22 +176,6 @@ export function GuidedScrollScreen({
     () => computeLineMap(words, contentWidth),
     [words, contentWidth]
   );
-  const lineTexts = useMemo(() => {
-    const nextLineTexts: string[] = [];
-
-    for (let line = 0; line < lineMap.totalLines; line++) {
-      nextLineTexts.push(
-        buildLineText(
-          sanitizedWords,
-          getFirstWordIndexForLine(lineMap, line),
-          getLastWordIndexForLine(lineMap, line)
-        )
-      );
-    }
-
-    return nextLineTexts;
-  }, [lineMap, sanitizedWords]);
-
   const applyReaderUpdate = (transform: (reader: Reader) => Reader) => {
     if (updateReader) {
       updateReader(transform);
@@ -340,14 +324,22 @@ export function GuidedScrollScreen({
   }
   const visibleEnd = Math.min(lineMap.totalLines - 1, visibleStart + availableLines - 1);
 
-  // Build visible line elements
-  const lineElements: { text: string; isCurrentLine: boolean }[] = [];
-  for (let line = visibleStart; line <= visibleEnd; line++) {
-    lineElements.push({
-      text: lineTexts[line] ?? "",
-      isCurrentLine: line === currentLine,
-    });
-  }
+  const lineElements = useMemo(() => {
+    const nextLineElements: { text: string; isCurrentLine: boolean }[] = [];
+
+    for (let line = visibleStart; line <= visibleEnd; line++) {
+      nextLineElements.push({
+        text: buildLineText(
+          sanitizedWords,
+          getFirstWordIndexForLine(lineMap, line),
+          getLastWordIndexForLine(lineMap, line)
+        ),
+        isCurrentLine: line === currentLine,
+      });
+    }
+
+    return nextLineElements;
+  }, [currentLine, lineMap, sanitizedWords, visibleEnd, visibleStart]);
 
   const progress = useMemo(() => {
     if (words.length <= 1) return 1;

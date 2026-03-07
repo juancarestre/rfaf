@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p2
 issue_id: "048"
 tags: [code-review, performance, architecture, quality]
@@ -71,7 +71,7 @@ Position remapping currently scans the target rendered word array linearly for e
 
 ## Recommended Action
 
-**To be filled during triage.**
+Add cached source-index-to-target-index lookup tables in the shared remap helper so repeated mode switches reuse precomputed remap data instead of rescanning target words linearly.
 
 ## Technical Details
 
@@ -91,9 +91,9 @@ Position remapping currently scans the target rendered word array linearly for e
 
 ## Acceptance Criteria
 
-- [ ] Position remapping has a bounded strategy for repeated mode switches
-- [ ] Shared TUI/agent remap behavior remains correct
-- [ ] Existing remap tests still pass or are expanded
+- [x] Position remapping has a bounded strategy for repeated mode switches
+- [x] Shared TUI/agent remap behavior remains correct
+- [x] Existing remap tests still pass or are expanded
 
 ## Work Log
 
@@ -107,3 +107,15 @@ Position remapping currently scans the target rendered word array linearly for e
 
 **Learnings:**
 - The correctness fix for chunk/source identity increased the importance of remap cost on large inputs
+
+### 2026-03-07 - Resolution
+
+**By:** OpenCode
+
+**Actions:**
+- Added a `WeakMap`-backed target index lookup cache in `src/engine/position-mapping.ts`
+- Kept the progress-ratio fallback for unmapped cases while making repeated remaps O(1) after cache warmup
+- Re-ran remap coverage through shared runtime and agent tests
+
+**Learnings:**
+- Target-word identity is a good cache key because mode transforms are already cached per rendered word array

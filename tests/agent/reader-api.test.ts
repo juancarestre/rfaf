@@ -297,6 +297,17 @@ describe("agent reader api", () => {
     expect(runtime.reader.state).toBe("paused");
   });
 
+  it("treats same-mode agent switches as a no-op", () => {
+    const runtime = createAgentReaderRuntime(words(), 300, "normal", "scroll");
+
+    expect(
+      executeAgentCommand(runtime, {
+        type: "set_reading_mode",
+        readingMode: "scroll",
+      })
+    ).toBe(runtime);
+  });
+
   it("resets mode cache when source corpus changes via summarize", async () => {
     let runtime = createAgentReaderRuntime(words(), 300);
     runtime = executeAgentCommand(runtime, {
