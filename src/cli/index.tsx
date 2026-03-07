@@ -170,10 +170,10 @@ async function main() {
   const normalizedArgs = normalizeSummaryArgs(rawArgs);
   const parser = yargs(normalizedArgs)
     .scriptName("rfaf")
-    .usage("$0 [file] [options]")
-    .positional("file", {
+    .usage("$0 [input] [options]")
+    .positional("input", {
       type: "string",
-      describe: "Plaintext file to read",
+      describe: "Plaintext file path or article URL (http/https)",
     })
     .option("wpm", {
       type: "number",
@@ -196,6 +196,15 @@ async function main() {
     })
     .requiresArg("text-scale")
     .requiresArg("mode")
+    .example("$0 https://example.com/article", "Fetch and speed-read a web article")
+    .example("cat article.txt | $0", "Read piped plaintext from stdin")
+    .example(
+      "$0 article.txt --summary=medium --mode=scroll",
+      "Summarize then read in scroll mode"
+    )
+    .epilog(
+      "Runtime controls: Space play/pause, Left/Right seek, Up/Down WPM, 1-4 switch mode, ? help, q quit"
+    )
     .exitProcess(false)
     .help()
     .version()

@@ -19,6 +19,13 @@ function writeLine(stream: NodeJS.WriteStream, text: string): void {
   stream.write(`${text}\n`);
 }
 
+function truncateSingleLine(text: string, maxChars: number): string {
+  if (maxChars <= 0) return "";
+  if (text.length <= maxChars) return text;
+  if (maxChars <= 3) return ".".repeat(maxChars);
+  return `${text.slice(0, maxChars - 3)}...`;
+}
+
 export function createLoadingIndicator(options: LoadingIndicatorOptions): LoadingIndicator {
   const stream = options.stream ?? process.stderr;
   const intervalMs = options.intervalMs ?? 80;
@@ -31,7 +38,10 @@ export function createLoadingIndicator(options: LoadingIndicatorOptions): Loadin
   const renderFrame = () => {
     const frame = FRAMES[frameIndex % FRAMES.length];
     frameIndex += 1;
-    stream.write(`\r${frame} ${safeMessage}`);
+    const columns = stream.columns ?? 80;
+    const maxMessageLength = Math.max(1, columns - 3);
+    const singleLineMessage = truncateSingleLine(safeMessage, maxMessageLength);
+    stream.write(`\r${frame} ${singleLineMessage}`);
   };
 
   const clearFrame = () => {

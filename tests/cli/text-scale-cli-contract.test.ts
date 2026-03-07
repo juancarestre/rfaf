@@ -58,7 +58,7 @@ describe("text-scale CLI contract", () => {
     const result = runCli(["--help"]);
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
-    expect(result.stdout.match(/rfaf \[file\] \[options\]/g)?.length ?? 0).toBe(1);
+    expect(result.stdout.match(/rfaf \[input\] \[options\]/g)?.length ?? 0).toBe(1);
   });
 
   it("prints version without additional help output", () => {
