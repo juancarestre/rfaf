@@ -30,7 +30,8 @@ describe("summarize loading indicator", () => {
     indicator.succeed("done");
     indicator.stop();
 
-    expect(mock.output).toContain("Summarizing: summarizing");
+    expect(mock.output).toContain("summarizing");
+    expect(mock.output).not.toContain("Summarizing:");
     expect(mock.output).toContain("[ok] done");
   });
 

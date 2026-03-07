@@ -1,7 +1,7 @@
 ---
 title: "feat: Add URL ingestion with Readability extraction"
 type: feat
-status: active
+status: completed
 date: 2026-03-07
 origin: docs/brainstorms/2026-03-07-url-ingestion-brainstorm.md
 ---
@@ -214,40 +214,40 @@ The non-TTY branch hardcodes `"Summarizing:"` as a prefix. Change to use the mes
 
 ### Functional Requirements
 
-- [ ] `rfaf https://example.com/article` fetches and speed-reads the article
-- [ ] `rfaf http://localhost:3000/page` works with HTTP URLs
-- [ ] URL detection is protocol-prefix only (`http://`, `https://`) — case insensitive
-- [ ] Loading spinner shows `"fetching article from <url>..."` during fetch
-- [ ] Spinner shows success with article title and word count on completion
-- [ ] Article title from Readability is used as source label in status bar (fallback: URL)
-- [ ] Extraction failure produces clear error: `"Could not extract article content from <url>"` + exit 1
-- [ ] HTTP errors produce distinct messages: `"HTTP <status> fetching <url>"` + exit 1
-- [ ] Fetch timeout (10s) produces: `"Timed out fetching <url> (10s limit)"` + exit 1
-- [ ] Non-HTML content types rejected with: `"Unsupported content type: <type> from <url>"` + exit 1
-- [ ] `text/plain` responses bypass Readability and use raw text directly
-- [ ] Browser User-Agent header sent with all requests
-- [ ] HTTP redirects followed (standard fetch behavior)
-- [ ] Size limit (5MB) applied to extracted text, not raw HTML
-- [ ] Raw response size pre-checked via Content-Length header (10MB limit)
-- [ ] URL + piped stdin: fetches URL, warns about ignoring stdin (mirrors file+stdin behavior)
-- [ ] Works with `--summary`, `--mode`, and all existing flags
-- [ ] Ctrl+C during fetch aborts cleanly (AbortSignal)
+- [x] `rfaf https://example.com/article` fetches and speed-reads the article
+- [x] `rfaf http://localhost:3000/page` works with HTTP URLs
+- [x] URL detection is protocol-prefix only (`http://`, `https://`) — case insensitive
+- [x] Loading spinner shows `"fetching article from <url>..."` during fetch
+- [x] Spinner shows success with article title and word count on completion
+- [x] Article title from Readability is used as source label in status bar (fallback: URL)
+- [x] Extraction failure produces clear error: `"Could not extract article content from <url>"` + exit 1
+- [x] HTTP errors produce distinct messages: `"HTTP <status> fetching <url>"` + exit 1
+- [x] Fetch timeout (10s) produces: `"Timed out fetching <url> (10s limit)"` + exit 1
+- [x] Non-HTML content types rejected with: `"Unsupported content type: <type> from <url>"` + exit 1
+- [x] `text/plain` responses bypass Readability and use raw text directly
+- [x] Browser User-Agent header sent with all requests
+- [x] HTTP redirects followed (standard fetch behavior)
+- [x] Size limit (5MB) applied to extracted text, not raw HTML
+- [x] Raw response size pre-checked via Content-Length header (10MB limit)
+- [x] URL + piped stdin: fetches URL, warns about ignoring stdin (mirrors file+stdin behavior)
+- [x] Works with `--summary`, `--mode`, and all existing flags
+- [x] Ctrl+C during fetch aborts cleanly (AbortSignal)
 
 ### Testing Requirements (TDD-First)
 
-- [ ] All tests written BEFORE their corresponding implementation code
-- [ ] `tests/ingest/detect.test.ts` — 7+ URL detection cases
-- [ ] `tests/ingest/url.test.ts` — 20+ cases covering happy path, errors, edge cases
-- [ ] All tests use injectable `fetchFn` — zero network calls in test suite
-- [ ] Error messages tested with exact string matching (existing convention)
-- [ ] `bun test` passes
-- [ ] `bun x tsc --noEmit` passes (strict TypeScript)
+- [x] All tests written BEFORE their corresponding implementation code
+- [x] `tests/ingest/detect.test.ts` — 7+ URL detection cases
+- [x] `tests/ingest/url.test.ts` — 20+ cases covering happy path, errors, edge cases
+- [x] All tests use injectable `fetchFn` — zero network calls in test suite
+- [x] Error messages tested with exact string matching (existing convention)
+- [x] `bun test` passes
+- [x] `bun x tsc --noEmit` passes (strict TypeScript)
 
 ### Non-Functional Requirements
 
-- [ ] Article title sanitized through `sanitizeTerminalText()` before display
-- [ ] `createLoadingIndicator` non-TTY prefix bug fixed (no more hardcoded "Summarizing:")
-- [ ] `isProbablyReaderable()` pre-check before full Readability extraction
+- [x] Article title sanitized through `sanitizeTerminalText()` before display
+- [x] `createLoadingIndicator` non-TTY prefix bug fixed (no more hardcoded "Summarizing:")
+- [x] `isProbablyReaderable()` pre-check before full Readability extraction
 
 ## Success Metrics
 
