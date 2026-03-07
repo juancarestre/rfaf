@@ -44,7 +44,7 @@ export function createLoadingIndicator(options: LoadingIndicatorOptions): Loadin
       active = true;
 
       if (!stream.isTTY) {
-        writeLine(stream, `Summarizing: ${safeMessage}`);
+        writeLine(stream, safeMessage);
         return;
       }
 
