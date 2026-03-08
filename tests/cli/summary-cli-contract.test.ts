@@ -81,7 +81,8 @@ describe("summary CLI contract", () => {
     });
 
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain("Summarizing:");
+    expect(result.stderr).toContain("summarizing (medium) with openai/gpt-4o-mini");
+    expect(result.stderr).not.toContain("Summarizing:");
     expect(result.stderr).toContain("[error] summarization failed");
     expect(result.stderr).toContain("Summarization failed [timeout]");
   });

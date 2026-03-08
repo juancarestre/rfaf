@@ -41,6 +41,7 @@ import {
 } from "../processor/line-computation";
 import { tokenize } from "../processor/tokenizer";
 import type { Word } from "../processor/types";
+import { readUrl, type ReadUrlOptions } from "../ingest/url";
 
 interface AgentSummaryContext {
   enabled: boolean;
@@ -102,6 +103,20 @@ interface AgentSummarizeCommand {
   sourceLabel: string;
   readingMode?: ReadingMode;
   llmConfig: Pick<LLMConfig, "provider" | "model" | "apiKey" | "timeoutMs" | "maxRetries">;
+}
+
+export interface AgentIngestUrlCommand {
+  url: string;
+  initialWpm?: number;
+  textScale?: TextScalePreset;
+  readingMode?: ReadingMode;
+  readUrlOptions?: Omit<ReadUrlOptions, "fetchFn">;
+}
+
+export interface AgentIngestUrlResult {
+  runtime: AgentReaderRuntime;
+  sourceLabel: string;
+  wordCount: number;
 }
 
 const AGENT_SCROLL_CONTENT_WIDTH = 78;
@@ -218,6 +233,29 @@ export function createAgentReaderRuntime(
       model: null,
       sourceLabel: null,
     },
+  };
+}
+
+export async function executeAgentIngestUrlCommand(
+  command: AgentIngestUrlCommand,
+  readUrlFn: typeof readUrl = readUrl
+): Promise<AgentIngestUrlResult> {
+  const readingMode =
+    command.readingMode === undefined
+      ? DEFAULT_READING_MODE
+      : requireReadingMode(command.readingMode, "ingest_url command");
+  const document = await readUrlFn(command.url, command.readUrlOptions);
+  const runtime = createAgentReaderRuntime(
+    tokenize(document.content),
+    command.initialWpm ?? 300,
+    command.textScale ?? DEFAULT_TEXT_SCALE,
+    readingMode
+  );
+
+  return {
+    runtime,
+    sourceLabel: document.source,
+    wordCount: document.wordCount,
   };
 }
 

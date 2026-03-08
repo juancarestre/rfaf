@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   createAgentReaderRuntime,
   executeAgentCommand,
+  executeAgentIngestUrlCommand,
   executeAgentSummarizeCommand,
   getAgentReaderState,
 } from "../../src/agent/reader-api";
@@ -125,6 +126,60 @@ describe("agent reader api", () => {
     expect(state.summarySourceLabel).toBe("stdin (summary:short)");
     expect(state.readingMode).toBe("rsvp");
     expect(state.totalWords).toBeGreaterThan(3);
+  });
+
+  it("supports URL ingest through agent API with runtime defaults/overrides", async () => {
+    const result = await executeAgentIngestUrlCommand(
+      {
+        url: "https://example.com/article",
+        initialWpm: 420,
+        textScale: "large",
+        readingMode: "scroll",
+        readUrlOptions: {
+          timeoutMs: 25,
+        },
+      },
+      async (url, options) => {
+        expect(url).toBe("https://example.com/article");
+        expect(options?.timeoutMs).toBe(25);
+        return {
+          content: "alpha beta gamma",
+          source: "Mock Article",
+          wordCount: 3,
+        };
+      }
+    );
+
+    const state = getAgentReaderState(result.runtime);
+    expect(result.sourceLabel).toBe("Mock Article");
+    expect(result.wordCount).toBe(3);
+    expect(state.currentWpm).toBe(420);
+    expect(state.textScale).toBe("large");
+    expect(state.readingMode).toBe("scroll");
+    expect(state.totalWords).toBe(3);
+  });
+
+  it("fails closed for invalid mode payload in ingest_url command", async () => {
+    let readUrlCalls = 0;
+
+    await expect(
+      executeAgentIngestUrlCommand(
+        {
+          url: "https://example.com/article",
+          readingMode: "warp" as unknown as "rsvp",
+        },
+        async () => {
+          readUrlCalls += 1;
+          return {
+            content: "should not run",
+            source: "Nope",
+            wordCount: 3,
+          };
+        }
+      )
+    ).rejects.toThrow("Invalid readingMode");
+
+    expect(readUrlCalls).toBe(0);
   });
 
   it("supports switching to chunked reading mode through agent command", () => {

@@ -5,9 +5,12 @@ import { closeSync, fstatSync, openSync } from "node:fs";
 import { ReadStream } from "node:tty";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
+import { createLoadingIndicator } from "./loading-indicator";
 import { readPlaintextFile } from "../ingest/plaintext";
 import { isStdinPiped, resolveInputSource } from "../ingest/detect";
 import { readStdin } from "../ingest/stdin";
+import { readUrl } from "../ingest/url";
+import type { Document } from "../ingest/types";
 import { sanitizeTerminalText } from "../ui/sanitize-terminal-text";
 import { App } from "../ui/App";
 import { SummarizeRuntimeError, UsageError } from "./errors";
@@ -167,10 +170,10 @@ async function main() {
   const normalizedArgs = normalizeSummaryArgs(rawArgs);
   const parser = yargs(normalizedArgs)
     .scriptName("rfaf")
-    .usage("$0 [file] [options]")
-    .positional("file", {
+    .usage("$0 [input] [options]")
+    .positional("input", {
       type: "string",
-      describe: "Plaintext file to read",
+      describe: "Plaintext file path or article URL (http/https)",
     })
     .option("wpm", {
       type: "number",
@@ -193,6 +196,15 @@ async function main() {
     })
     .requiresArg("text-scale")
     .requiresArg("mode")
+    .example("$0 https://example.com/article", "Fetch and speed-read a web article")
+    .example("cat article.txt | $0", "Read piped plaintext from stdin")
+    .example(
+      "$0 article.txt --summary=medium --mode=scroll",
+      "Summarize then read in scroll mode"
+    )
+    .epilog(
+      "Runtime controls: Space play/pause, Left/Right seek, Up/Down WPM, 1-4 switch mode, ? help, q quit"
+    )
     .exitProcess(false)
     .help()
     .version()
@@ -227,11 +239,34 @@ async function main() {
     process.exit(0);
   }
 
-  const pendingWarning = source.kind === "file" ? source.warning : undefined;
+  const pendingWarning =
+    source.kind === "file" || source.kind === "url" ? source.warning : undefined;
 
-  let document: Awaited<ReturnType<typeof readPlaintextFile>>;
+  let document: Document;
   if (source.kind === "file") {
     document = await readPlaintextFile(source.path);
+  } else if (source.kind === "url") {
+    const loading = createLoadingIndicator({
+      message: `fetching article from ${source.url}`,
+    });
+    const abortController = new AbortController();
+    const onSigInt = () => {
+      abortController.abort(new Error("SIGINT"));
+    };
+
+    process.once("SIGINT", onSigInt);
+    loading.start();
+    try {
+      document = await readUrl(source.url, { signal: abortController.signal });
+      loading.stop();
+      loading.succeed(`article loaded: ${document.source} (${document.wordCount} words)`);
+    } catch (error: unknown) {
+      loading.stop();
+      loading.fail("failed to fetch article");
+      throw error;
+    } finally {
+      process.removeListener("SIGINT", onSigInt);
+    }
   } else {
     try {
       document = await readStdin();

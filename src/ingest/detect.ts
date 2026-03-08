@@ -7,6 +7,7 @@ export interface ResolveInputSourceParams {
 
 export type InputSource =
   | { kind: "file"; path: string; warning?: string }
+  | { kind: "url"; url: string; warning?: string }
   | { kind: "stdin" }
   | { kind: "none" };
 
@@ -16,6 +17,18 @@ export function resolveInputSource(
   const { fileArg, stdinIsPiped } = params;
 
   if (fileArg) {
+    if (/^https?:\/\//i.test(fileArg)) {
+      if (stdinIsPiped) {
+        return {
+          kind: "url",
+          url: fileArg,
+          warning: "URL argument provided; ignoring piped stdin",
+        };
+      }
+
+      return { kind: "url", url: fileArg };
+    }
+
     if (stdinIsPiped) {
       return {
         kind: "file",
