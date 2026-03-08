@@ -6,7 +6,7 @@ import { ReadStream } from "node:tty";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { createLoadingIndicator } from "./loading-indicator";
-import { readPlaintextFile } from "../ingest/plaintext";
+import { readFileSource } from "../ingest/file-dispatcher";
 import { isStdinPiped, resolveInputSource } from "../ingest/detect";
 import { readStdin } from "../ingest/stdin";
 import { readUrl } from "../ingest/url";
@@ -173,7 +173,7 @@ async function main() {
     .usage("$0 [input] [options]")
     .positional("input", {
       type: "string",
-      describe: "Plaintext file path or article URL (http/https)",
+      describe: "Plaintext/PDF file path or article URL (http/https)",
     })
     .option("wpm", {
       type: "number",
@@ -244,7 +244,7 @@ async function main() {
 
   let document: Document;
   if (source.kind === "file") {
-    document = await readPlaintextFile(source.path);
+    document = await readFileSource(source.path);
   } else if (source.kind === "url") {
     const loading = createLoadingIndicator({
       message: `fetching article from ${source.url}`,

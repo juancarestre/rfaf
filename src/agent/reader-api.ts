@@ -42,6 +42,7 @@ import {
 import { tokenize } from "../processor/tokenizer";
 import type { Word } from "../processor/types";
 import { readUrl, type ReadUrlOptions } from "../ingest/url";
+import { readFileSource } from "../ingest/file-dispatcher";
 
 interface AgentSummaryContext {
   enabled: boolean;
@@ -117,6 +118,37 @@ export interface AgentIngestUrlResult {
   runtime: AgentReaderRuntime;
   sourceLabel: string;
   wordCount: number;
+}
+
+export interface AgentIngestFileCommand {
+  path: string;
+  initialWpm?: number;
+  textScale?: TextScalePreset;
+  readingMode?: ReadingMode;
+}
+
+export interface AgentIngestFileResult {
+  runtime: AgentReaderRuntime;
+  sourceLabel: string;
+  wordCount: number;
+}
+
+export type AgentIngestFileErrorCode =
+  | "FILE_NOT_FOUND"
+  | "PDF_INVALID"
+  | "PDF_ENCRYPTED"
+  | "PDF_EMPTY_TEXT"
+  | "INPUT_TOO_LARGE"
+  | "PDF_PARSE_FAILED";
+
+export class AgentIngestFileError extends Error {
+  code: AgentIngestFileErrorCode;
+
+  constructor(code: AgentIngestFileErrorCode, message: string) {
+    super(message);
+    this.name = "AgentIngestFileError";
+    this.code = code;
+  }
 }
 
 const AGENT_SCROLL_CONTENT_WIDTH = 78;
@@ -257,6 +289,61 @@ export async function executeAgentIngestUrlCommand(
     sourceLabel: document.source,
     wordCount: document.wordCount,
   };
+}
+
+export async function executeAgentIngestFileCommand(
+  command: AgentIngestFileCommand,
+  readFileSourceFn: typeof readFileSource = readFileSource
+): Promise<AgentIngestFileResult> {
+  const readingMode =
+    command.readingMode === undefined
+      ? DEFAULT_READING_MODE
+      : requireReadingMode(command.readingMode, "ingest_file command");
+  let document: Awaited<ReturnType<typeof readFileSource>>;
+  try {
+    document = await readFileSourceFn(command.path);
+  } catch (error: unknown) {
+    throw toAgentIngestFileError(error);
+  }
+
+  const runtime = createAgentReaderRuntime(
+    tokenize(document.content),
+    command.initialWpm ?? 300,
+    command.textScale ?? DEFAULT_TEXT_SCALE,
+    readingMode
+  );
+
+  return {
+    runtime,
+    sourceLabel: document.source,
+    wordCount: document.wordCount,
+  };
+}
+
+function toAgentIngestFileError(error: unknown): AgentIngestFileError {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (message === "File not found") {
+    return new AgentIngestFileError("FILE_NOT_FOUND", message);
+  }
+
+  if (message === "Invalid or corrupted PDF file") {
+    return new AgentIngestFileError("PDF_INVALID", message);
+  }
+
+  if (message === "PDF is encrypted or password-protected") {
+    return new AgentIngestFileError("PDF_ENCRYPTED", message);
+  }
+
+  if (message === "PDF has no extractable text") {
+    return new AgentIngestFileError("PDF_EMPTY_TEXT", message);
+  }
+
+  if (message === "Input exceeds maximum supported size") {
+    return new AgentIngestFileError("INPUT_TOO_LARGE", message);
+  }
+
+  return new AgentIngestFileError("PDF_PARSE_FAILED", "Failed to parse PDF file");
 }
 
 export async function executeAgentSummarizeCommand(

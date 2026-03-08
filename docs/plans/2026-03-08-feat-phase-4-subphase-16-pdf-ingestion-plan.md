@@ -1,7 +1,7 @@
 ---
 title: "feat: Add PDF ingestion with dispatcher-based file routing"
 type: feat
-status: active
+status: completed
 date: 2026-03-08
 origin: docs/brainstorms/2026-03-08-rfaf-phase-4-subphase-16-pdf-ingestion-brainstorm.md
 ---
@@ -174,29 +174,29 @@ The dispatcher layer is intentionally thin: route by file extension and delegate
 
 ### Functional Requirements
 
-- [ ] `rfaf <local.pdf>` ingests PDF text and starts reading.
-- [ ] File dispatcher routes `.pdf` (case-insensitive) to PDF ingestor and all other files to plaintext ingestor.
-- [ ] No OCR/decryption flow is introduced in this subphase.
-- [ ] No-text/encrypted/corrupt PDFs fail with deterministic error messages.
-- [ ] PDF inputs preserve existing flag behavior (`--summary`, `--mode`, `--wpm`, `--text-scale`).
-- [ ] `file + piped stdin` precedence/warning behavior is unchanged.
+- [x] `rfaf <local.pdf>` ingests PDF text and starts reading.
+- [x] File dispatcher routes `.pdf` (case-insensitive) to PDF ingestor and all other files to plaintext ingestor.
+- [x] No OCR/decryption flow is introduced in this subphase.
+- [x] No-text/encrypted/corrupt PDFs fail with deterministic error messages.
+- [x] PDF inputs preserve existing flag behavior (`--summary`, `--mode`, `--wpm`, `--text-scale`).
+- [x] `file + piped stdin` precedence/warning behavior is unchanged.
 
 ### Non-Functional Requirements
 
-- [ ] Raw file size limit enforced before PDF parse.
-- [ ] Extracted text size limit enforced with shared ingest limit guard.
-- [ ] Terminal-bound output remains sanitized and deterministic.
-- [ ] Dispatcher abstraction remains minimal (routing only, no parser logic).
+- [x] Raw file size limit enforced before PDF parse.
+- [x] Extracted text size limit enforced with shared ingest limit guard.
+- [x] Terminal-bound output remains sanitized and deterministic.
+- [x] Dispatcher abstraction remains minimal (routing only, no parser logic).
 
 ### Quality Gates (TDD-First)
 
-- [ ] Tests are written before implementation in each phase.
-- [ ] `tests/ingest/pdf.test.ts` covers happy path + all documented failures.
-- [ ] `tests/ingest/file-dispatcher.test.ts` covers routing/boundaries.
-- [ ] `tests/cli/pdf-cli-contract.test.ts` validates process-level contracts.
-- [ ] Parity tests cover agent path for local PDF ingest.
-- [ ] `bun test` passes.
-- [ ] `bun x tsc --noEmit` passes.
+- [x] Tests are written before implementation in each phase.
+- [x] `tests/ingest/pdf.test.ts` covers happy path + all documented failures.
+- [x] `tests/ingest/file-dispatcher.test.ts` covers routing/boundaries.
+- [x] `tests/cli/pdf-cli-contract.test.ts` validates process-level contracts.
+- [x] Parity tests cover agent path for local PDF ingest.
+- [x] `bun test` passes.
+- [x] `bun x tsc --noEmit` passes.
 
 ## Success Metrics
 

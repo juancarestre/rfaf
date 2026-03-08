@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import {
+  AgentIngestFileError,
   createAgentReaderRuntime,
   executeAgentCommand,
+  executeAgentIngestFileCommand,
   executeAgentIngestUrlCommand,
   executeAgentSummarizeCommand,
   getAgentReaderState,
@@ -157,6 +159,145 @@ describe("agent reader api", () => {
     expect(state.textScale).toBe("large");
     expect(state.readingMode).toBe("scroll");
     expect(state.totalWords).toBe(3);
+  });
+
+  it("supports file ingest through agent API with runtime defaults/overrides", async () => {
+    const result = await executeAgentIngestFileCommand(
+      {
+        path: "tests/fixtures/sample.pdf",
+        initialWpm: 410,
+        textScale: "small",
+        readingMode: "chunked",
+      },
+      async (path: string) => {
+        expect(path).toBe("tests/fixtures/sample.pdf");
+        return {
+          content: "alpha beta gamma delta",
+          source: "sample.pdf",
+          wordCount: 4,
+        };
+      }
+    );
+
+    const state = getAgentReaderState(result.runtime);
+    expect(result.sourceLabel).toBe("sample.pdf");
+    expect(result.wordCount).toBe(4);
+    expect(state.currentWpm).toBe(410);
+    expect(state.textScale).toBe("small");
+    expect(state.readingMode).toBe("chunked");
+  });
+
+  it("fails closed for invalid mode payload in ingest_file command", async () => {
+    let readFileCalls = 0;
+
+    await expect(
+      executeAgentIngestFileCommand(
+        {
+          path: "tests/fixtures/sample.pdf",
+          readingMode: "warp" as unknown as "rsvp",
+        },
+        async () => {
+          readFileCalls += 1;
+          return {
+            content: "should not run",
+            source: "Nope",
+            wordCount: 3,
+          };
+        }
+      )
+    ).rejects.toThrow("Invalid readingMode");
+
+    expect(readFileCalls).toBe(0);
+  });
+
+  it("maps missing file ingest failures to stable agent error code", async () => {
+    await expect(
+      executeAgentIngestFileCommand(
+        {
+          path: "tests/fixtures/missing.pdf",
+        },
+        async () => {
+          throw new Error("File not found");
+        }
+      )
+    ).rejects.toMatchObject({
+      name: "AgentIngestFileError",
+      code: "FILE_NOT_FOUND",
+      message: "File not found",
+    } satisfies Partial<AgentIngestFileError>);
+  });
+
+  it("maps known PDF ingest failures to stable agent error codes", async () => {
+    const cases = [
+      {
+        error: new Error("Invalid or corrupted PDF file"),
+        code: "PDF_INVALID",
+      },
+      {
+        error: new Error("PDF is encrypted or password-protected"),
+        code: "PDF_ENCRYPTED",
+      },
+      {
+        error: new Error("PDF has no extractable text"),
+        code: "PDF_EMPTY_TEXT",
+      },
+      {
+        error: new Error("Input exceeds maximum supported size"),
+        code: "INPUT_TOO_LARGE",
+      },
+      {
+        error: new Error("PDF parsing timed out"),
+        code: "PDF_PARSE_FAILED",
+      },
+    ] as const;
+
+    for (const entry of cases) {
+      await expect(
+        executeAgentIngestFileCommand(
+          {
+            path: "tests/fixtures/sample.pdf",
+          },
+          async () => {
+            throw entry.error;
+          }
+        )
+      ).rejects.toMatchObject({
+        name: "AgentIngestFileError",
+        code: entry.code,
+      });
+    }
+  });
+
+  it("normalizes unknown ingest failures to deterministic parse error class", async () => {
+    await expect(
+      executeAgentIngestFileCommand(
+        {
+          path: "tests/fixtures/sample.pdf",
+        },
+        async () => {
+          throw new Error("native parser panic");
+        }
+      )
+    ).rejects.toMatchObject({
+      name: "AgentIngestFileError",
+      code: "PDF_PARSE_FAILED",
+      message: "Failed to parse PDF file",
+    } satisfies Partial<AgentIngestFileError>);
+
+    await expect(
+      executeAgentIngestFileCommand(
+        {
+          path: "tests/fixtures/sample.pdf",
+        },
+        async () => {
+          throw "stringy failure";
+        }
+      )
+    ).rejects.toMatchObject({
+      name: "AgentIngestFileError",
+      code: "PDF_PARSE_FAILED",
+      message: "Failed to parse PDF file",
+    } satisfies Partial<AgentIngestFileError>);
   });
 
   it("fails closed for invalid mode payload in ingest_url command", async () => {
