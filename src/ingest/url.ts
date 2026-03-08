@@ -22,41 +22,6 @@ export interface ReadUrlOptions {
   fetchFn?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 }
 
-interface MergedSignal {
-  signal: AbortSignal;
-  aborted: () => boolean;
-  timedOut: () => boolean;
-  dispose: () => void;
-}
-
-function isAbortLikeError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-  const name = error instanceof Error ? error.name.toLowerCase() : "";
-  return name.includes("abort") || message.includes("abort");
-}
-
-function isTimeoutLikeError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-  const name = error instanceof Error ? error.name.toLowerCase() : "";
-  return (
-    name.includes("timeout") ||
-    message.includes("timed out") ||
-    message.includes("timeout")
-  );
-}
-
-function mergeSignal(timeoutMs: number, parentSignal?: AbortSignal): MergedSignal {
-  const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  const merged = parentSignal ? AbortSignal.any([parentSignal, timeoutSignal]) : timeoutSignal;
-
-  return {
-    signal: merged,
-    aborted: () => merged.aborted,
-    timedOut: () => timeoutSignal.aborted,
-    dispose: () => {},
-  };
-}
-
 function normalizeContentType(value: string | null): string {
   if (!value) return "";
   return value.split(";")[0].trim().toLowerCase();
@@ -64,6 +29,55 @@ function normalizeContentType(value: string | null): string {
 
 function extractionError(url: string): Error {
   return new Error(`Could not extract article content from ${url}`);
+}
+
+function formatTimeoutLabel(timeoutMs: number): string {
+  if (timeoutMs % 1000 === 0) {
+    return `${timeoutMs / 1000}s`;
+  }
+
+  return `${timeoutMs}ms`;
+}
+
+async function readResponseTextWithinLimit(
+  response: Response,
+  maxResponseBytes: number,
+  url: string
+): Promise<string> {
+  if (!response.body) {
+    return "";
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let bytesRead = 0;
+  let text = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    bytesRead += value.byteLength;
+    if (bytesRead > maxResponseBytes) {
+      try {
+        await reader.cancel();
+      } catch {
+        // ignore cancellation errors after limit breach
+      }
+      throw new Error(`Response too large from ${url}`);
+    }
+
+    text += decoder.decode(value, { stream: true });
+  }
+
+  text += decoder.decode();
+  return text;
+}
+
+function isAbortDomException(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
 }
 
 export async function readUrl(
@@ -75,14 +89,17 @@ export async function readUrl(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const userAgent = options.userAgent ?? DEFAULT_USER_AGENT;
   const fetchFn = options.fetchFn ?? fetch;
-  const mergedSignal = mergeSignal(timeoutMs, options.signal);
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, timeoutSignal])
+    : timeoutSignal;
 
   try {
     const response = await fetchFn(url, {
       headers: {
         "User-Agent": userAgent,
       },
-      signal: mergedSignal.signal,
+      signal,
       redirect: "follow",
     });
 
@@ -107,7 +124,7 @@ export async function readUrl(
       }
     }
 
-    const payload = await response.text();
+    const payload = await readResponseTextWithinLimit(response, maxResponseBytes, url);
 
     if (isPlaintext) {
       const byteLength = Buffer.byteLength(payload, "utf8");
@@ -145,11 +162,15 @@ export async function readUrl(
       wordCount: countWords(content),
     };
   } catch (error: unknown) {
-    if (mergedSignal.timedOut() || isTimeoutLikeError(error)) {
-      throw new Error(`Timed out fetching ${url} (10s limit)`);
+    if (timeoutSignal.aborted) {
+      throw new Error(`Timed out fetching ${url} (${formatTimeoutLabel(timeoutMs)} limit)`);
     }
 
-    if (mergedSignal.aborted() || isAbortLikeError(error)) {
+    if (options.signal?.aborted) {
+      throw new Error(`Fetching ${url} cancelled`);
+    }
+
+    if (isAbortDomException(error)) {
       throw new Error(`Fetching ${url} cancelled`);
     }
 
@@ -158,7 +179,5 @@ export async function readUrl(
     }
 
     throw new Error(String(error));
-  } finally {
-    mergedSignal.dispose();
   }
 }

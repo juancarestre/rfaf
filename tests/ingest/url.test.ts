@@ -116,11 +116,22 @@ describe("readUrl", () => {
   it("maps timeout failures to a deterministic timeout message", async () => {
     await expect(
       readUrl("https://example.com/timeout", {
-        fetchFn: async () => {
-          throw new Error("operation timed out");
+        timeoutMs: 5,
+        fetchFn: async (_input: RequestInfo | URL, init?: RequestInit) => {
+          await new Promise<never>((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              "abort",
+              () => {
+                reject(new DOMException("The operation was aborted.", "AbortError"));
+              },
+              { once: true }
+            );
+          });
+
+          throw new Error("unreachable");
         },
       })
-    ).rejects.toThrow("Timed out fetching https://example.com/timeout (10s limit)");
+    ).rejects.toThrow("Timed out fetching https://example.com/timeout (5ms limit)");
   });
 
   it("maps external abort signals to cancellation message", async () => {
@@ -159,6 +170,22 @@ describe("readUrl", () => {
         fetchFn: async () => new Response("forbidden", { status: 403 }),
       })
     ).rejects.toThrow("HTTP 403 fetching https://example.com/403");
+  });
+
+  it("does not misclassify HTTP failures when URL contains timeout", async () => {
+    await expect(
+      readUrl("https://example.com/timeout/path", {
+        fetchFn: async () => new Response("missing", { status: 404 }),
+      })
+    ).rejects.toThrow("HTTP 404 fetching https://example.com/timeout/path");
+  });
+
+  it("does not misclassify HTTP failures when URL contains abort", async () => {
+    await expect(
+      readUrl("https://example.com/abort/path", {
+        fetchFn: async () => new Response("forbidden", { status: 403 }),
+      })
+    ).rejects.toThrow("HTTP 403 fetching https://example.com/abort/path");
   });
 
   it("rejects unsupported content types", async () => {
@@ -272,6 +299,21 @@ describe("readUrl", () => {
           }),
       })
     ).rejects.toThrow("Response too large from https://example.com/huge");
+  });
+
+  it("rejects large responses when content-length header is missing", async () => {
+    await expect(
+      readUrl("https://example.com/no-length", {
+        maxResponseBytes: 100,
+        fetchFn: async () =>
+          new Response("A".repeat(200), {
+            status: 200,
+            headers: {
+              "content-type": "text/plain",
+            },
+          }),
+      })
+    ).rejects.toThrow("Response too large from https://example.com/no-length");
   });
 
   it("honors custom maxBytes option", async () => {
