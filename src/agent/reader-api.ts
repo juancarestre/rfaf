@@ -44,6 +44,7 @@ import type { Word } from "../processor/types";
 import { IngestFileError } from "../ingest/errors";
 import { readUrl, type ReadUrlOptions } from "../ingest/url";
 import { readFileSource } from "../ingest/file-dispatcher";
+import { readClipboard } from "../ingest/clipboard";
 
 interface AgentSummaryContext {
   enabled: boolean;
@@ -134,6 +135,18 @@ export interface AgentIngestFileResult {
   wordCount: number;
 }
 
+export interface AgentIngestClipboardCommand {
+  initialWpm?: number;
+  textScale?: TextScalePreset;
+  readingMode?: ReadingMode;
+}
+
+export interface AgentIngestClipboardResult {
+  runtime: AgentReaderRuntime;
+  sourceLabel: string;
+  wordCount: number;
+}
+
 export type AgentIngestFileErrorCode =
   | "FILE_NOT_FOUND"
   | "BINARY_FILE"
@@ -156,6 +169,23 @@ export class AgentIngestFileError extends Error {
   constructor(code: AgentIngestFileErrorCode, message: string) {
     super(message);
     this.name = "AgentIngestFileError";
+    this.code = code;
+  }
+}
+
+export type AgentIngestClipboardErrorCode =
+  | "CLIPBOARD_EMPTY"
+  | "CLIPBOARD_UNAVAILABLE"
+  | "CLIPBOARD_PERMISSION_DENIED"
+  | "INPUT_TOO_LARGE"
+  | "CLIPBOARD_READ_FAILED";
+
+export class AgentIngestClipboardError extends Error {
+  code: AgentIngestClipboardErrorCode;
+
+  constructor(code: AgentIngestClipboardErrorCode, message: string) {
+    super(message);
+    this.name = "AgentIngestClipboardError";
     this.code = code;
   }
 }
@@ -329,6 +359,35 @@ export async function executeAgentIngestFileCommand(
   };
 }
 
+export async function executeAgentIngestClipboardCommand(
+  command: AgentIngestClipboardCommand,
+  readClipboardFn: typeof readClipboard = readClipboard
+): Promise<AgentIngestClipboardResult> {
+  const readingMode =
+    command.readingMode === undefined
+      ? DEFAULT_READING_MODE
+      : requireReadingMode(command.readingMode, "ingest_clipboard command");
+  let document: Awaited<ReturnType<typeof readClipboard>>;
+  try {
+    document = await readClipboardFn();
+  } catch (error: unknown) {
+    throw toAgentIngestClipboardError(error);
+  }
+
+  const runtime = createAgentReaderRuntime(
+    tokenize(document.content),
+    command.initialWpm ?? 300,
+    command.textScale ?? DEFAULT_TEXT_SCALE,
+    readingMode
+  );
+
+  return {
+    runtime,
+    sourceLabel: document.source,
+    wordCount: document.wordCount,
+  };
+}
+
 function isEpubPath(path: string): boolean {
   return path.toLowerCase().endsWith(".epub");
 }
@@ -424,6 +483,45 @@ function toAgentIngestFileError(
   }
 
   return new AgentIngestFileError("PDF_PARSE_FAILED", "Failed to parse PDF file");
+}
+
+function toAgentIngestClipboardError(error: unknown): AgentIngestClipboardError {
+  if (error instanceof IngestFileError) {
+    switch (error.code) {
+      case "CLIPBOARD_EMPTY":
+        return new AgentIngestClipboardError("CLIPBOARD_EMPTY", error.message);
+      case "CLIPBOARD_UNAVAILABLE":
+        return new AgentIngestClipboardError("CLIPBOARD_UNAVAILABLE", error.message);
+      case "CLIPBOARD_PERMISSION_DENIED":
+        return new AgentIngestClipboardError("CLIPBOARD_PERMISSION_DENIED", error.message);
+      case "INPUT_TOO_LARGE":
+        return new AgentIngestClipboardError("INPUT_TOO_LARGE", error.message);
+      case "CLIPBOARD_READ_FAILED":
+        return new AgentIngestClipboardError("CLIPBOARD_READ_FAILED", error.message);
+      default:
+        break;
+    }
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (message === "Clipboard is empty") {
+    return new AgentIngestClipboardError("CLIPBOARD_EMPTY", message);
+  }
+
+  if (message === "Clipboard is unavailable on this system") {
+    return new AgentIngestClipboardError("CLIPBOARD_UNAVAILABLE", message);
+  }
+
+  if (message === "Clipboard access denied") {
+    return new AgentIngestClipboardError("CLIPBOARD_PERMISSION_DENIED", message);
+  }
+
+  if (message === "Input exceeds maximum supported size") {
+    return new AgentIngestClipboardError("INPUT_TOO_LARGE", message);
+  }
+
+  return new AgentIngestClipboardError("CLIPBOARD_READ_FAILED", "Failed to read clipboard");
 }
 
 export async function executeAgentSummarizeCommand(
