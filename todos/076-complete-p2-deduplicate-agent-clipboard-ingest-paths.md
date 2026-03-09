@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p2
 issue_id: "076"
 tags: [code-review, quality, agent, ingest]
@@ -54,7 +54,7 @@ Clipboard ingest introduced duplicate runtime-construction and error-mapping pat
 
 ## Recommended Action
 
-**To be filled during triage.**
+Implemented: shared ingest-runtime helper now removes duplicated agent ingest assembly, and redundant nested normalization blocks were removed in clipboard ingest.
 
 ## Technical Details
 
@@ -74,10 +74,10 @@ Clipboard ingest introduced duplicate runtime-construction and error-mapping pat
 
 ## Acceptance Criteria
 
-- [ ] Shared helper removes duplicated agent runtime assembly for ingest commands.
-- [ ] Clipboard mapping remains deterministic and typed-first.
-- [ ] Redundant nested normalization blocks are removed.
-- [ ] Tests pass.
+- [x] Shared helper removes duplicated agent runtime assembly for ingest commands.
+- [x] Clipboard mapping remains deterministic and typed-first.
+- [x] Redundant nested normalization blocks are removed.
+- [x] Tests pass.
 
 ## Work Log
 
@@ -90,6 +90,19 @@ Clipboard ingest introduced duplicate runtime-construction and error-mapping pat
 
 **Learnings:**
 - Deterministic contracts are easier to preserve when runtime and mapping logic are centralized.
+
+### 2026-03-09 - Resolution
+
+**By:** OpenCode
+
+**Actions:**
+- Added `buildAgentIngestResult` helper in `src/agent/reader-api.ts` and reused it across URL/file/clipboard ingest commands.
+- Kept fail-closed readingMode validation before source reads.
+- Removed redundant nested size-limit normalization in `src/ingest/clipboard.ts`.
+- Verified with targeted and full test runs.
+
+**Learnings:**
+- Shared result builders reduce drift while preserving deterministic side-effect ordering.
 
 ## Notes
 

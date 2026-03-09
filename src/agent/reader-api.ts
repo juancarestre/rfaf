@@ -60,6 +60,17 @@ interface AgentLineMapCache {
   lineMap: LineMap;
 }
 
+interface AgentIngestDocument {
+  content: string;
+  source: string;
+  wordCount: number;
+}
+
+interface AgentIngestRuntimeOptions {
+  initialWpm?: number;
+  textScale?: TextScalePreset;
+}
+
 export interface AgentReaderRuntime {
   reader: Reader;
   session: Session;
@@ -307,6 +318,25 @@ export function createAgentReaderRuntime(
   };
 }
 
+function buildAgentIngestResult(
+  document: AgentIngestDocument,
+  options: AgentIngestRuntimeOptions,
+  readingMode: ReadingMode
+): { runtime: AgentReaderRuntime; sourceLabel: string; wordCount: number } {
+  const runtime = createAgentReaderRuntime(
+    tokenize(document.content),
+    options.initialWpm ?? 300,
+    options.textScale ?? DEFAULT_TEXT_SCALE,
+    readingMode
+  );
+
+  return {
+    runtime,
+    sourceLabel: document.source,
+    wordCount: document.wordCount,
+  };
+}
+
 export async function executeAgentIngestUrlCommand(
   command: AgentIngestUrlCommand,
   readUrlFn: typeof readUrl = readUrl
@@ -316,18 +346,7 @@ export async function executeAgentIngestUrlCommand(
       ? DEFAULT_READING_MODE
       : requireReadingMode(command.readingMode, "ingest_url command");
   const document = await readUrlFn(command.url, command.readUrlOptions);
-  const runtime = createAgentReaderRuntime(
-    tokenize(document.content),
-    command.initialWpm ?? 300,
-    command.textScale ?? DEFAULT_TEXT_SCALE,
-    readingMode
-  );
-
-  return {
-    runtime,
-    sourceLabel: document.source,
-    wordCount: document.wordCount,
-  };
+  return buildAgentIngestResult(document, command, readingMode);
 }
 
 export async function executeAgentIngestFileCommand(
@@ -345,18 +364,7 @@ export async function executeAgentIngestFileCommand(
     throw toAgentIngestFileError(error, command.path);
   }
 
-  const runtime = createAgentReaderRuntime(
-    tokenize(document.content),
-    command.initialWpm ?? 300,
-    command.textScale ?? DEFAULT_TEXT_SCALE,
-    readingMode
-  );
-
-  return {
-    runtime,
-    sourceLabel: document.source,
-    wordCount: document.wordCount,
-  };
+  return buildAgentIngestResult(document, command, readingMode);
 }
 
 export async function executeAgentIngestClipboardCommand(
@@ -374,18 +382,7 @@ export async function executeAgentIngestClipboardCommand(
     throw toAgentIngestClipboardError(error);
   }
 
-  const runtime = createAgentReaderRuntime(
-    tokenize(document.content),
-    command.initialWpm ?? 300,
-    command.textScale ?? DEFAULT_TEXT_SCALE,
-    readingMode
-  );
-
-  return {
-    runtime,
-    sourceLabel: document.source,
-    wordCount: document.wordCount,
-  };
+  return buildAgentIngestResult(document, command, readingMode);
 }
 
 function isEpubPath(path: string): boolean {

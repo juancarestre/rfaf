@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p2
 issue_id: "074"
 tags: [code-review, reliability, error-handling, ingest]
@@ -54,7 +54,7 @@ Unavailable clipboard environments can be misclassified as generic read failures
 
 ## Recommended Action
 
-**To be filled during triage.**
+Implemented: unavailable classification now covers display/session/backend-unavailable conditions with deterministic `CLIPBOARD_UNAVAILABLE` mapping.
 
 ## Technical Details
 
@@ -72,10 +72,10 @@ Unavailable clipboard environments can be misclassified as generic read failures
 
 ## Acceptance Criteria
 
-- [ ] Unavailable backend scenarios map to `CLIPBOARD_UNAVAILABLE` deterministically.
-- [ ] Unknown true backend crashes still map to `CLIPBOARD_READ_FAILED`.
-- [ ] Coverage added for newly supported unavailable signatures.
-- [ ] Tests pass.
+- [x] Unavailable backend scenarios map to `CLIPBOARD_UNAVAILABLE` deterministically.
+- [x] Unknown true backend crashes still map to `CLIPBOARD_READ_FAILED`.
+- [x] Coverage added for newly supported unavailable signatures.
+- [x] Tests pass.
 
 ## Work Log
 
@@ -88,6 +88,18 @@ Unavailable clipboard environments can be misclassified as generic read failures
 
 **Learnings:**
 - Source contracts become fragile when unavailable vs generic failure boundaries are not explicit.
+
+### 2026-03-09 - Resolution
+
+**By:** OpenCode
+
+**Actions:**
+- Expanded unavailable detection and centralized backend-unavailable classification in `src/ingest/clipboard.ts`.
+- Added deterministic unavailable contract test coverage in `tests/ingest/clipboard.test.ts`.
+- Ran full validation (`bun test`, `bun x tsc --noEmit`).
+
+**Learnings:**
+- Explicit unavailable/permission/failure buckets remove brittle message-only behavior.
 
 ## Notes
 

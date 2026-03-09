@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p1
 issue_id: "073"
 tags: [code-review, reliability, cli, ingest]
@@ -53,7 +53,7 @@ Clipboard ingestion currently stops after the first non-"command unavailable" ba
 
 ## Recommended Action
 
-**To be filled during triage.**
+Implemented: clipboard backend probing now continues across all candidates and only fails after all backends are exhausted.
 
 ## Technical Details
 
@@ -70,10 +70,10 @@ Clipboard ingestion currently stops after the first non-"command unavailable" ba
 
 ## Acceptance Criteria
 
-- [ ] Clipboard backend probing attempts all configured candidates before terminal failure.
-- [ ] Deterministic error class remains stable after all attempts fail.
-- [ ] Linux fallback behavior covered by tests.
-- [ ] Tests pass.
+- [x] Clipboard backend probing attempts all configured candidates before terminal failure.
+- [x] Deterministic error class remains stable after all attempts fail.
+- [x] Linux fallback behavior covered by tests.
+- [x] Tests pass.
 
 ## Work Log
 
@@ -87,6 +87,18 @@ Clipboard ingestion currently stops after the first non-"command unavailable" ba
 
 **Learnings:**
 - Multi-backend probing must not fail closed too early when deterministic compatibility is required.
+
+### 2026-03-09 - Resolution
+
+**By:** OpenCode
+
+**Actions:**
+- Updated `src/ingest/clipboard.ts` backend probing loop to continue across failures.
+- Added fallback/continuation coverage in `tests/ingest/clipboard.test.ts`.
+- Verified with `bun test` and `bun x tsc --noEmit`.
+
+**Learnings:**
+- Deterministic ingest behavior and compatibility improve when candidate probing is exhaustive.
 
 ## Notes
 

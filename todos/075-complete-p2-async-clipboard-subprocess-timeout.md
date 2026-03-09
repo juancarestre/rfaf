@@ -1,5 +1,5 @@
 ---
-status: pending
+status: complete
 priority: p2
 issue_id: "075"
 tags: [code-review, performance, ingest, cli]
@@ -54,7 +54,7 @@ Clipboard reads currently use synchronous subprocess execution, which blocks the
 
 ## Recommended Action
 
-**To be filled during triage.**
+Implemented: clipboard subprocess execution now uses async `Bun.spawn` with deterministic per-backend timeout handling.
 
 ## Technical Details
 
@@ -72,10 +72,10 @@ Clipboard reads currently use synchronous subprocess execution, which blocks the
 
 ## Acceptance Criteria
 
-- [ ] Clipboard backend execution is asynchronous.
-- [ ] Timeout behavior is deterministic and tested.
-- [ ] Non-clipboard flows remain unaffected.
-- [ ] Tests pass.
+- [x] Clipboard backend execution is asynchronous.
+- [x] Timeout behavior is deterministic and tested.
+- [x] Non-clipboard flows remain unaffected.
+- [x] Tests pass.
 
 ## Work Log
 
@@ -88,6 +88,18 @@ Clipboard reads currently use synchronous subprocess execution, which blocks the
 
 **Learnings:**
 - Sync subprocess calls in ingest paths can create avoidable responsiveness risk.
+
+### 2026-03-09 - Resolution
+
+**By:** OpenCode
+
+**Actions:**
+- Replaced sync backend execution with async runner and timeout race in `src/ingest/clipboard.ts`.
+- Added timeout-related test coverage in `tests/ingest/clipboard.test.ts`.
+- Re-ran full test + typecheck gates.
+
+**Learnings:**
+- Async subprocess boundaries with explicit timeout controls improve runtime resilience.
 
 ## Notes
 

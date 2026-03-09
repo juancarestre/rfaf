@@ -5,9 +5,32 @@ import type { Document } from "./types";
 
 type ClipboardReadText = () => Promise<string>;
 
+interface ClipboardCommandResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+}
+
+type ClipboardCommandRunner = (
+  command: string[],
+  timeoutMs: number
+) => Promise<ClipboardCommandResult>;
+
+interface ReadSystemClipboardOptions {
+  platform: NodeJS.Platform;
+  timeoutMs: number;
+  runClipboardCommand: ClipboardCommandRunner;
+}
+
+const DEFAULT_CLIPBOARD_COMMAND_TIMEOUT_MS = 1_500;
+
 interface ReadClipboardOptions {
   maxBytes?: number;
   readText?: ClipboardReadText;
+  platform?: NodeJS.Platform;
+  backendTimeoutMs?: number;
+  runClipboardCommand?: ClipboardCommandRunner;
 }
 
 declare global {
@@ -15,37 +38,20 @@ declare global {
   var __RFAF_TEST_READ_CLIPBOARD__: ClipboardReadText | undefined;
 }
 
-interface ClipboardCommand {
-  command: string[];
-}
-
-function commandCandidatesForPlatform(platform: NodeJS.Platform): ClipboardCommand[] {
+function commandCandidatesForPlatform(platform: NodeJS.Platform): string[][] {
   if (platform === "darwin") {
-    return [{ command: ["pbpaste"] }];
+    return [["pbpaste"]];
   }
 
   if (platform === "win32") {
-    return [
-      {
-        command: ["powershell", "-NoProfile", "-Command", "Get-Clipboard -Raw"],
-      },
-    ];
+    return [["powershell", "-NoProfile", "-Command", "Get-Clipboard -Raw"]];
   }
 
   return [
-    { command: ["wl-paste", "--no-newline"] },
-    { command: ["xclip", "-selection", "clipboard", "-o"] },
-    { command: ["xsel", "--clipboard", "--output"] },
+    ["wl-paste", "--no-newline"],
+    ["xclip", "-selection", "clipboard", "-o"],
+    ["xsel", "--clipboard", "--output"],
   ];
-}
-
-function decodeBuffer(value: Uint8Array | ArrayBuffer | null | undefined): string {
-  if (!value) {
-    return "";
-  }
-
-  const bytes = value instanceof ArrayBuffer ? new Uint8Array(value) : value;
-  return Buffer.from(bytes).toString("utf8");
 }
 
 function isCommandUnavailable(stderr: string): boolean {
@@ -58,6 +64,86 @@ function isCommandUnavailable(stderr: string): boolean {
   );
 }
 
+function isClipboardUnavailable(stderr: string): boolean {
+  const normalized = stderr.toLowerCase();
+  return (
+    normalized.includes("clipboard is unavailable") ||
+    normalized.includes("no clipboard") ||
+    normalized.includes("cannot open display") ||
+    normalized.includes("can't open display") ||
+    normalized.includes("no display") ||
+    normalized.includes("wayland display") ||
+    normalized.includes("x11") ||
+    normalized.includes("x server") ||
+    normalized.includes("dbus") ||
+    normalized.includes("session bus")
+  );
+}
+
+function isPermissionDenied(stderr: string): boolean {
+  const normalized = stderr.toLowerCase();
+  return (
+    normalized.includes("permission") ||
+    normalized.includes("denied") ||
+    normalized.includes("not authorized")
+  );
+}
+
+async function readStreamText(stream: ReadableStream<Uint8Array> | null | undefined): Promise<string> {
+  if (!stream) {
+    return "";
+  }
+
+  return new Response(stream).text();
+}
+
+async function runClipboardCommand(
+  command: string[],
+  timeoutMs: number
+): Promise<ClipboardCommandResult> {
+  const process = Bun.spawn(command, {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<{ kind: "timeout" }>((resolve) => {
+    timeoutHandle = setTimeout(() => {
+      resolve({ kind: "timeout" });
+    }, timeoutMs);
+  });
+
+  const exitedPromise = process.exited.then((exitCode) => ({ kind: "exit" as const, exitCode }));
+  const result = await Promise.race([exitedPromise, timeoutPromise]);
+
+  if (timeoutHandle) {
+    clearTimeout(timeoutHandle);
+  }
+
+  if (result.kind === "timeout") {
+    process.kill();
+    return {
+      exitCode: 1,
+      stdout: "",
+      stderr: `clipboard backend timed out after ${timeoutMs}ms`,
+      timedOut: true,
+    };
+  }
+
+  const [stdout, stderr] = await Promise.all([
+    readStreamText(process.stdout),
+    readStreamText(process.stderr),
+  ]);
+
+  return {
+    exitCode: result.exitCode,
+    stdout,
+    stderr,
+    timedOut: false,
+  };
+}
+
 function normalizeClipboardReadError(error: unknown): IngestFileError {
   if (error instanceof IngestFileError) {
     return error;
@@ -65,24 +151,14 @@ function normalizeClipboardReadError(error: unknown): IngestFileError {
 
   const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
 
-  if (
-    message.includes("no clipboard") ||
-    message.includes("clipboard is unavailable") ||
-    message.includes("no such file") ||
-    message.includes("command not found") ||
-    message.includes("not recognized")
-  ) {
+  if (isCommandUnavailable(message) || isClipboardUnavailable(message)) {
     return new IngestFileError(
       "CLIPBOARD_UNAVAILABLE",
       "Clipboard is unavailable on this system"
     );
   }
 
-  if (
-    message.includes("permission") ||
-    message.includes("denied") ||
-    message.includes("not authorized")
-  ) {
+  if (isPermissionDenied(message)) {
     return new IngestFileError(
       "CLIPBOARD_PERMISSION_DENIED",
       "Clipboard access denied"
@@ -96,41 +172,67 @@ function normalizeClipboardReadError(error: unknown): IngestFileError {
   return new IngestFileError("CLIPBOARD_READ_FAILED", "Failed to read clipboard");
 }
 
-async function readSystemClipboard(): Promise<string> {
-  const candidates = commandCandidatesForPlatform(process.platform);
-  let lastFailure: Error | null = null;
+async function readSystemClipboard(options: ReadSystemClipboardOptions): Promise<string> {
+  const candidates = commandCandidatesForPlatform(options.platform);
+  let sawUnavailable = false;
+  let sawPermissionDenied = false;
+  let sawFailure = false;
 
   for (const candidate of candidates) {
-    const result = Bun.spawnSync(candidate.command, {
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const result = await options.runClipboardCommand(candidate, options.timeoutMs);
 
     if (result.exitCode === 0) {
-      return decodeBuffer(result.stdout);
+      return result.stdout;
     }
 
-    const stderr = decodeBuffer(result.stderr).trim();
-    if (isCommandUnavailable(stderr)) {
+    const stderr = result.stderr.trim();
+
+    if (result.timedOut) {
+      sawFailure = true;
       continue;
     }
 
-    lastFailure = new Error(stderr || "clipboard backend failed");
-    break;
+    if (isCommandUnavailable(stderr) || isClipboardUnavailable(stderr)) {
+      sawUnavailable = true;
+      continue;
+    }
+
+    if (isPermissionDenied(stderr)) {
+      sawPermissionDenied = true;
+      continue;
+    }
+
+    sawFailure = true;
   }
 
-  if (lastFailure) {
-    throw lastFailure;
+  if (sawPermissionDenied) {
+    throw new IngestFileError("CLIPBOARD_PERMISSION_DENIED", "Clipboard access denied");
   }
 
-  throw new Error("no clipboard backend found");
+  if (sawUnavailable && !sawFailure) {
+    throw new IngestFileError(
+      "CLIPBOARD_UNAVAILABLE",
+      "Clipboard is unavailable on this system"
+    );
+  }
+
+  throw new IngestFileError("CLIPBOARD_READ_FAILED", "Failed to read clipboard");
 }
 
 export async function readClipboard(options: ReadClipboardOptions = {}): Promise<Document> {
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_INPUT_BYTES;
+  const platform = options.platform ?? process.platform;
+  const backendTimeoutMs = options.backendTimeoutMs ?? DEFAULT_CLIPBOARD_COMMAND_TIMEOUT_MS;
+  const runCommand = options.runClipboardCommand ?? runClipboardCommand;
   const readText =
-    options.readText ?? globalThis.__RFAF_TEST_READ_CLIPBOARD__ ?? readSystemClipboard;
+    options.readText ??
+    globalThis.__RFAF_TEST_READ_CLIPBOARD__ ??
+    (() =>
+      readSystemClipboard({
+        platform,
+        timeoutMs: backendTimeoutMs,
+        runClipboardCommand: runCommand,
+      }));
 
   try {
     const content = await readText();
@@ -139,12 +241,8 @@ export async function readClipboard(options: ReadClipboardOptions = {}): Promise
       throw new IngestFileError("CLIPBOARD_EMPTY", "Clipboard is empty");
     }
 
-    const byteLength = new TextEncoder().encode(content).length;
-    try {
-      assertInputWithinLimit(byteLength, maxBytes);
-    } catch (error: unknown) {
-      throw normalizeClipboardReadError(error);
-    }
+    const byteLength = Buffer.byteLength(content, "utf8");
+    assertInputWithinLimit(byteLength, maxBytes);
 
     return {
       content,
