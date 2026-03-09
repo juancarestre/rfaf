@@ -1,8 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import {
+  AgentIngestClipboardError,
   AgentIngestFileError,
   createAgentReaderRuntime,
   executeAgentCommand,
+  executeAgentIngestClipboardCommand,
   executeAgentIngestFileCommand,
   executeAgentIngestUrlCommand,
   executeAgentSummarizeCommand,
@@ -185,6 +187,30 @@ describe("agent reader api", () => {
     expect(state.currentWpm).toBe(410);
     expect(state.textScale).toBe("small");
     expect(state.readingMode).toBe("chunked");
+  });
+
+  it("supports clipboard ingest through agent API with runtime defaults/overrides", async () => {
+    const result = await executeAgentIngestClipboardCommand(
+      {
+        initialWpm: 390,
+        textScale: "large",
+        readingMode: "bionic",
+      },
+      async () => {
+        return {
+          content: "copied text from clipboard",
+          source: "clipboard",
+          wordCount: 4,
+        };
+      }
+    );
+
+    const state = getAgentReaderState(result.runtime);
+    expect(result.sourceLabel).toBe("clipboard");
+    expect(result.wordCount).toBe(4);
+    expect(state.currentWpm).toBe(390);
+    expect(state.textScale).toBe("large");
+    expect(state.readingMode).toBe("bionic");
   });
 
   it("supports EPUB file ingest through agent API", async () => {
@@ -378,6 +404,69 @@ describe("agent reader api", () => {
         code: entry.code,
       });
     }
+  });
+
+  it("maps known clipboard ingest failures to stable agent error codes", async () => {
+    const cases = [
+      {
+        error: new Error("Clipboard is empty"),
+        code: "CLIPBOARD_EMPTY",
+      },
+      {
+        error: new Error("Clipboard is unavailable on this system"),
+        code: "CLIPBOARD_UNAVAILABLE",
+      },
+      {
+        error: new Error("Clipboard access denied"),
+        code: "CLIPBOARD_PERMISSION_DENIED",
+      },
+      {
+        error: new Error("Input exceeds maximum supported size"),
+        code: "INPUT_TOO_LARGE",
+      },
+    ] as const;
+
+    for (const entry of cases) {
+      await expect(
+        executeAgentIngestClipboardCommand(
+          {},
+          async () => {
+            throw entry.error;
+          }
+        )
+      ).rejects.toMatchObject({
+        name: "AgentIngestClipboardError",
+        code: entry.code,
+      });
+    }
+  });
+
+  it("normalizes unknown clipboard ingest failures to deterministic fallback class", async () => {
+    await expect(
+      executeAgentIngestClipboardCommand(
+        {},
+        async () => {
+          throw new Error("native clipboard panic");
+        }
+      )
+    ).rejects.toMatchObject({
+      name: "AgentIngestClipboardError",
+      code: "CLIPBOARD_READ_FAILED",
+      message: "Failed to read clipboard",
+    } satisfies Partial<AgentIngestClipboardError>);
+
+    await expect(
+      executeAgentIngestClipboardCommand(
+        {},
+        async () => {
+          throw "stringy clipboard failure";
+        }
+      )
+    ).rejects.toMatchObject({
+      name: "AgentIngestClipboardError",
+      code: "CLIPBOARD_READ_FAILED",
+      message: "Failed to read clipboard",
+    } satisfies Partial<AgentIngestClipboardError>);
   });
 
   it("normalizes unknown ingest failures to deterministic parse error class", async () => {

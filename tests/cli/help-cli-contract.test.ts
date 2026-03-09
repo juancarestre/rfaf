@@ -26,7 +26,9 @@ describe("help CLI contract", () => {
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("rfaf [input] [options]");
     expect(result.stdout).toContain("Plaintext/PDF/EPUB/Markdown file path or article URL (http/https)");
+    expect(result.stdout).toContain("--clipboard");
     expect(result.stdout).toContain("https://example.com/article");
+    expect(result.stdout).toContain("rfaf --clipboard");
     expect(result.stdout).toContain("--summary=medium --mode");
     expect(result.stdout).toContain("Runtime controls:");
     expect(result.stdout).toContain("1-4 switch mod");

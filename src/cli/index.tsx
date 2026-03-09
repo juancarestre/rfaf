@@ -10,6 +10,7 @@ import { readFileSource } from "../ingest/file-dispatcher";
 import { isStdinPiped, resolveInputSource } from "../ingest/detect";
 import { readStdin } from "../ingest/stdin";
 import { readUrl } from "../ingest/url";
+import { readClipboard } from "../ingest/clipboard";
 import type { Document } from "../ingest/types";
 import { sanitizeTerminalText } from "../ui/sanitize-terminal-text";
 import { App } from "../ui/App";
@@ -189,6 +190,11 @@ async function main() {
       type: "string",
       describe: `Summarize before reading (${SUMMARY_PRESETS.join("|")}); bare --summary uses medium`,
     })
+    .option("clipboard", {
+      type: "boolean",
+      default: false,
+      describe: "Read plain text from system clipboard",
+    })
     .option("mode", {
       type: "string",
       default: DEFAULT_READING_MODE,
@@ -198,6 +204,7 @@ async function main() {
     .requiresArg("mode")
     .example("$0 https://example.com/article", "Fetch and speed-read a web article")
     .example("cat article.txt | $0", "Read piped plaintext from stdin")
+    .example("$0 --clipboard", "Read copied plain text from clipboard")
     .example(
       "$0 article.txt --summary=medium --mode=scroll",
       "Summarize then read in scroll mode"
@@ -229,10 +236,27 @@ async function main() {
     return;
   }
 
-  const source = resolveInputSource({
-    fileArg,
-    stdinIsPiped: isStdinPiped(),
-  });
+  const stdinIsPiped = isStdinPiped();
+
+  if (argv.clipboard) {
+    if (fileArg) {
+      if (/^https?:\/\//i.test(fileArg)) {
+        throw new UsageError("Cannot combine --clipboard with URL input");
+      }
+      throw new UsageError("Cannot combine --clipboard with file input");
+    }
+
+    if (stdinIsPiped) {
+      throw new UsageError("Cannot combine --clipboard with piped stdin");
+    }
+  }
+
+  const source = argv.clipboard
+    ? ({ kind: "clipboard" } as const)
+    : resolveInputSource({
+        fileArg,
+        stdinIsPiped,
+      });
 
   if (source.kind === "none") {
     parser.showHelp();
@@ -267,7 +291,7 @@ async function main() {
     } finally {
       process.removeListener("SIGINT", onSigInt);
     }
-  } else {
+  } else if (source.kind === "stdin") {
     try {
       document = await readStdin();
     } catch (error: unknown) {
@@ -278,6 +302,8 @@ async function main() {
       }
       throw error;
     }
+  } else {
+    document = await readClipboard();
   }
 
   if (pendingWarning) {

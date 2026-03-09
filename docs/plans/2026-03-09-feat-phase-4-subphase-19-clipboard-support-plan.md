@@ -1,7 +1,7 @@
 ---
 title: "feat: Add clipboard source ingestion with deterministic contracts"
 type: feat
-status: active
+status: completed
 date: 2026-03-09
 origin: docs/brainstorms/2026-03-09-rfaf-phase-4-subphase-19-clipboard-support-brainstorm.md
 ---
@@ -149,35 +149,35 @@ Chosen approach matches brainstorm Option A (dedicated clipboard source contract
 
 ### Functional Requirements
 
-- [ ] `rfaf --clipboard` ingests clipboard plain text and starts reading.
-- [ ] Clipboard output is normalized into existing `Document` contract with unchanged downstream mode behavior.
-- [ ] `--clipboard` cannot be combined with file/url/piped stdin; conflicts fail fast deterministically.
-- [ ] No auto fallback clipboard reads are introduced.
-- [ ] No rich HTML/image clipboard parsing is introduced in this subphase.
-- [ ] CLI and agent clipboard ingest parity ship together.
+- [x] `rfaf --clipboard` ingests clipboard plain text and starts reading.
+- [x] Clipboard output is normalized into existing `Document` contract with unchanged downstream mode behavior.
+- [x] `--clipboard` cannot be combined with file/url/piped stdin; conflicts fail fast deterministically.
+- [x] No auto fallback clipboard reads are introduced.
+- [x] No rich HTML/image clipboard parsing is introduced in this subphase.
+- [x] CLI and agent clipboard ingest parity ship together.
 
 ### Deterministic Failure Requirements
 
-- [ ] Empty clipboard returns deterministic error contract.
-- [ ] Unsupported/unavailable clipboard backend returns deterministic error contract.
-- [ ] Clipboard permission/backend failures return deterministic error contract.
-- [ ] Oversize clipboard payload returns canonical `Input exceeds maximum supported size`.
-- [ ] Unknown clipboard failures normalize to stable clipboard-specific fallback class.
+- [x] Empty clipboard returns deterministic error contract.
+- [x] Unsupported/unavailable clipboard backend returns deterministic error contract.
+- [x] Clipboard permission/backend failures return deterministic error contract.
+- [x] Oversize clipboard payload returns canonical `Input exceeds maximum supported size`.
+- [x] Unknown clipboard failures normalize to stable clipboard-specific fallback class.
 
 ### Non-Functional Requirements
 
-- [ ] Existing file/url/stdin detection precedence remains unchanged when `--clipboard` is absent.
-- [ ] Terminal-bound source/error strings remain sanitized.
-- [ ] Clipboard path does not introduce startup/perf regressions for non-clipboard runs.
+- [x] Existing file/url/stdin detection precedence remains unchanged when `--clipboard` is absent.
+- [x] Terminal-bound source/error strings remain sanitized.
+- [x] Clipboard path does not introduce startup/perf regressions for non-clipboard runs.
 
 ### Quality Gates (TDD-First)
 
-- [ ] Tests are authored first in each phase (red -> green -> refactor).
-- [ ] Clipboard ingest unit tests cover success + full failure matrix.
-- [ ] CLI clipboard contract + PTY tests pass.
-- [ ] Agent parity/error-contract tests pass.
-- [ ] `bun test` passes.
-- [ ] `bun x tsc --noEmit` passes.
+- [x] Tests are authored first in each phase (red -> green -> refactor).
+- [x] Clipboard ingest unit tests cover success + full failure matrix.
+- [x] CLI clipboard contract + PTY tests pass.
+- [x] Agent parity/error-contract tests pass.
+- [x] `bun test` passes.
+- [x] `bun x tsc --noEmit` passes.
 
 ## Success Metrics
 
