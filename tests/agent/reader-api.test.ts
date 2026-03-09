@@ -7,10 +7,11 @@ import {
   executeAgentIngestClipboardCommand,
   executeAgentIngestFileCommand,
   executeAgentIngestUrlCommand,
+  executeAgentNoBsCommand,
   executeAgentSummarizeCommand,
   getAgentReaderState,
 } from "../../src/agent/reader-api";
-import { SummarizeRuntimeError } from "../../src/cli/errors";
+import { NoBsRuntimeError, SummarizeRuntimeError } from "../../src/cli/errors";
 import type { Word } from "../../src/processor/types";
 
 function words(): Word[] {
@@ -131,6 +132,113 @@ describe("agent reader api", () => {
     expect(state.summarySourceLabel).toBe("stdin (summary:short)");
     expect(state.readingMode).toBe("rsvp");
     expect(state.totalWords).toBeGreaterThan(3);
+  });
+
+  it("supports no-bs then read through agent API", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    const transformedRuntime = await executeAgentNoBsCommand(
+      runtime,
+      {
+        sourceLabel: "stdin",
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async () => "first cleaned sentence second cleaned sentence"
+    );
+
+    const state = getAgentReaderState(transformedRuntime);
+    expect(state.summaryEnabled).toBe(false);
+    expect(state.currentWpm).toBe(320);
+    expect(state.summarySourceLabel).toBe("stdin (no-bs)");
+    expect(state.totalWords).toBeGreaterThan(3);
+  });
+
+  it("applies deterministic cleaner output before no-bs LLM stage", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    const transformedRuntime = await executeAgentNoBsCommand(
+      runtime,
+      {
+        sourceLabel: "stdin",
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async (input) => {
+        expect(input.input).toBe("deterministically cleaned text");
+        return "deterministically cleaned text";
+      },
+      () => "deterministically cleaned text"
+    );
+
+    expect(getAgentReaderState(transformedRuntime).totalWords).toBeGreaterThan(1);
+  });
+
+  it("fails closed when deterministic cleaner produces empty text", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    await expect(
+      executeAgentNoBsCommand(
+        runtime,
+        {
+          sourceLabel: "stdin",
+          llmConfig: {
+            provider: "openai",
+            model: "gpt-5-mini",
+            apiKey: "test",
+            timeoutMs: 1_000,
+            maxRetries: 0,
+          },
+        },
+        async () => "should not run",
+        () => ""
+      )
+    ).rejects.toMatchObject({
+      name: "NoBsRuntimeError",
+      stage: "schema",
+      message: "No-BS failed [schema]: no-bs produced empty text.",
+    });
+  });
+
+  it("surfaces deterministic no-bs runtime failures in agent path", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    await expect(
+      executeAgentNoBsCommand(
+        runtime,
+        {
+          sourceLabel: "stdin",
+          llmConfig: {
+            provider: "openai",
+            model: "gpt-5-mini",
+            apiKey: "test",
+            timeoutMs: 1_000,
+            maxRetries: 0,
+          },
+        },
+        async () => {
+          throw new NoBsRuntimeError(
+            "No-BS failed [schema]: language preservation check failed; cleaned text language differs from source.",
+            "schema"
+          );
+        }
+      )
+    ).rejects.toMatchObject({
+      name: "NoBsRuntimeError",
+      stage: "schema",
+      message:
+        "No-BS failed [schema]: language preservation check failed; cleaned text language differs from source.",
+    });
   });
 
   it("surfaces deterministic language-preservation summarize failure for agent parity", async () => {
