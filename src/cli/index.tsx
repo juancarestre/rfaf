@@ -33,6 +33,10 @@ import {
   resolveTextScale,
   TEXT_SCALE_PRESETS,
 } from "./text-scale-option";
+import {
+  resolveTranslateOption,
+  wasTranslateFlagProvided,
+} from "./translate-option";
 
 function useAlternateScreen(): boolean {
   if (process.env.RFAF_NO_ALT_SCREEN === "1") {
@@ -149,6 +153,53 @@ function normalizeSummaryArgs(rawArgs: string[]): string[] {
   return normalized;
 }
 
+function normalizeTranslateArgs(rawArgs: string[]): string[] {
+  const normalized: string[] = [];
+
+  const isLikelyInputPathOrUrl = (value: string): boolean => {
+    const candidate = value.trim();
+    if (!candidate) {
+      return true;
+    }
+
+    if (/^https?:\/\//i.test(candidate)) {
+      return true;
+    }
+
+    if (candidate.includes("/") || candidate.includes("\\") || candidate.includes(".")) {
+      return true;
+    }
+
+    return false;
+  };
+
+  for (let index = 0; index < rawArgs.length; index++) {
+    const token = rawArgs[index];
+
+    if (token === "--translate-to") {
+      const next = rawArgs[index + 1];
+
+      if (next === undefined || next.startsWith("-") || isLikelyInputPathOrUrl(next)) {
+        normalized.push("--translate-to=");
+        continue;
+      }
+
+      normalized.push(`--translate-to=${next}`);
+      index += 1;
+      continue;
+    }
+
+    if (token.startsWith("--translate-to=")) {
+      normalized.push(token);
+      continue;
+    }
+
+    normalized.push(token);
+  }
+
+  return normalized;
+}
+
 function validateNoBsArgs(rawArgs: string[]): void {
   for (const token of rawArgs) {
     if (token.startsWith("--no-bs=")) {
@@ -182,7 +233,7 @@ function redactSecrets(
 async function main() {
   const rawArgs = hideBin(process.argv);
   validateNoBsArgs(rawArgs);
-  const normalizedArgs = normalizeSummaryArgs(rawArgs);
+  const normalizedArgs = normalizeTranslateArgs(normalizeSummaryArgs(rawArgs));
   const parser = yargs(normalizedArgs)
     .scriptName("rfaf")
     .usage("$0 [input] [options]")
@@ -208,6 +259,10 @@ async function main() {
       type: "boolean",
       default: false,
       describe: "Clean low-value noise and keep high-signal content",
+    })
+    .option("translate-to", {
+      type: "string",
+      describe: "Translate content to a target language (e.g. es, pt-BR, english)",
     })
     .option("clipboard", {
       type: "boolean",
@@ -254,6 +309,10 @@ async function main() {
   const summaryOption = resolveSummaryOption(
     argv.summary,
     wasSummaryFlagProvided(normalizedArgs)
+  );
+  const translateOption = resolveTranslateOption(
+    argv["translate-to"],
+    wasTranslateFlagProvided(normalizedArgs)
   );
 
   if (argv.help || argv.version) {
@@ -339,6 +398,7 @@ async function main() {
     sourceLabel: document.source,
     noBsOption,
     summaryOption,
+    translateOption,
     mode,
   });
 
@@ -388,6 +448,7 @@ main().catch((error: unknown) => {
     renderedMessage.includes("text-scale") ||
     renderedMessage.includes("--summary") ||
     renderedMessage.includes("--mode") ||
+    renderedMessage.includes("--translate-to") ||
     renderedMessage.startsWith("Config error:")
   ) {
     process.exit(2);

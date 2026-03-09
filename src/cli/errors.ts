@@ -30,3 +30,16 @@ export class NoBsRuntimeError extends Error {
     this.stage = stage;
   }
 }
+
+export class TranslateRuntimeError extends Error {
+  readonly stage: "provider" | "schema" | "network" | "timeout" | "runtime";
+
+  constructor(
+    message: string,
+    stage: "provider" | "schema" | "network" | "timeout" | "runtime" = "runtime"
+  ) {
+    super(message);
+    this.name = "TranslateRuntimeError";
+    this.stage = stage;
+  }
+}

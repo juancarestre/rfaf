@@ -30,9 +30,20 @@ import {
   markPaused,
   type Session,
 } from "../engine/session";
-import { NoBsRuntimeError } from "../cli/errors";
+import {
+  NoBsRuntimeError,
+  SummarizeRuntimeError,
+  TranslateRuntimeError,
+  UsageError,
+} from "../cli/errors";
 import { noBsText } from "../llm/no-bs";
 import { summarizeText } from "../llm/summarize";
+import { translateContentInChunks } from "../llm/translate-chunking";
+import {
+  LanguageNormalizationError,
+  normalizeTargetLanguage,
+} from "../llm/language-normalizer";
+import { translateText } from "../llm/translate";
 import { applyDeterministicNoBs } from "../processor/no-bs-cleaner";
 import { getWordsForMode, type ModeWordCache, transformWordsForMode } from "../processor/mode-transform";
 import {
@@ -48,6 +59,7 @@ import { IngestFileError } from "../ingest/errors";
 import { readUrl, type ReadUrlOptions } from "../ingest/url";
 import { readFileSource } from "../ingest/file-dispatcher";
 import { readClipboard } from "../ingest/clipboard";
+import { sanitizeTerminalText } from "../ui/sanitize-terminal-text";
 
 interface AgentSummaryContext {
   enabled: boolean;
@@ -119,12 +131,22 @@ interface AgentSummarizeCommand {
   preset: SummaryPreset;
   sourceLabel: string;
   readingMode?: ReadingMode;
+  signal?: AbortSignal;
   llmConfig: Pick<LLMConfig, "provider" | "model" | "apiKey" | "timeoutMs" | "maxRetries">;
 }
 
 interface AgentNoBsCommand {
   sourceLabel: string;
   readingMode?: ReadingMode;
+  signal?: AbortSignal;
+  llmConfig: Pick<LLMConfig, "provider" | "model" | "apiKey" | "timeoutMs" | "maxRetries">;
+}
+
+interface AgentTranslateCommand {
+  target: string;
+  sourceLabel: string;
+  readingMode?: ReadingMode;
+  signal?: AbortSignal;
   llmConfig: Pick<LLMConfig, "provider" | "model" | "apiKey" | "timeoutMs" | "maxRetries">;
 }
 
@@ -235,6 +257,15 @@ function buildSummarySourceLabel(
   readingMode: ReadingMode
 ): string {
   const base = `${sourceLabel} (summary:${preset})`;
+  return readingMode === "rsvp" ? base : `${base} [${readingMode}]`;
+}
+
+function buildTranslatedSourceLabel(
+  sourceLabel: string,
+  targetLanguage: string,
+  readingMode: ReadingMode
+): string {
+  const base = `${sourceLabel} (translated:${targetLanguage})`;
   return readingMode === "rsvp" ? base : `${base} [${readingMode}]`;
 }
 
@@ -541,15 +572,34 @@ export async function executeAgentSummarizeCommand(
       : requireReadingMode(command.readingMode, "summarize command");
 
   const originalContent = runtime.sourceWords.map((word) => word.text).join(" ");
-  const summaryContent = await summarize({
-    provider: command.llmConfig.provider,
-    model: command.llmConfig.model,
-    apiKey: command.llmConfig.apiKey,
-    preset: command.preset,
-    input: originalContent,
-    timeoutMs: command.llmConfig.timeoutMs,
-    maxRetries: command.llmConfig.maxRetries,
-  });
+  let summaryContent: string;
+  try {
+    summaryContent = await summarize({
+      provider: command.llmConfig.provider,
+      model: command.llmConfig.model,
+      apiKey: command.llmConfig.apiKey,
+      preset: command.preset,
+      input: originalContent,
+      timeoutMs: command.llmConfig.timeoutMs,
+      maxRetries: command.llmConfig.maxRetries,
+      signal: command.signal,
+    });
+  } catch (error: unknown) {
+    if (error instanceof SummarizeRuntimeError) {
+      const provider = sanitizeTerminalText(command.llmConfig.provider);
+      const model = sanitizeTerminalText(command.llmConfig.model);
+      throw new SummarizeRuntimeError(
+        `${error.message} (provider=${provider}, model=${model})`,
+        error.stage
+      );
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    throw new SummarizeRuntimeError(
+      `Summarization failed [runtime]: ${sanitizeTerminalText(message)}`,
+      "runtime"
+    );
+  }
 
   const summaryWords = tokenize(summaryContent);
   const { words: transformedSummaryWords, modeWordCache } = getWordsForMode(
@@ -607,13 +657,23 @@ export async function executeAgentNoBsCommand(
       input: deterministicCleaned,
       timeoutMs: command.llmConfig.timeoutMs,
       maxRetries: command.llmConfig.maxRetries,
+      signal: command.signal,
     });
   } catch (error: unknown) {
     if (error instanceof NoBsRuntimeError) {
-      throw error;
+      const provider = sanitizeTerminalText(command.llmConfig.provider);
+      const model = sanitizeTerminalText(command.llmConfig.model);
+      throw new NoBsRuntimeError(
+        `${error.message} (provider=${provider}, model=${model})`,
+        error.stage
+      );
     }
 
-    throw new NoBsRuntimeError("No-BS failed [runtime]: unexpected provider runtime error.", "runtime");
+    const message = error instanceof Error ? error.message : String(error);
+    throw new NoBsRuntimeError(
+      `No-BS failed [runtime]: ${sanitizeTerminalText(message)}`,
+      "runtime"
+    );
   }
 
   const cleanedWords = tokenize(cleanedContent);
@@ -638,6 +698,94 @@ export async function executeAgentNoBsCommand(
       provider: null,
       model: null,
       sourceLabel: `${command.sourceLabel} (no-bs)`,
+    },
+  };
+}
+
+export async function executeAgentTranslateCommand(
+  runtime: AgentReaderRuntime,
+  command: AgentTranslateCommand,
+  normalizeTarget: typeof normalizeTargetLanguage = normalizeTargetLanguage,
+  runTranslate: typeof translateText = translateText
+): Promise<AgentReaderRuntime> {
+  const readingMode =
+    command.readingMode === undefined
+      ? runtime.readingMode
+      : requireReadingMode(command.readingMode, "translate command");
+
+  let targetLanguage: string;
+  try {
+    targetLanguage = await normalizeTarget({
+      target: command.target,
+      provider: command.llmConfig.provider,
+      model: command.llmConfig.model,
+      apiKey: command.llmConfig.apiKey,
+      timeoutMs: command.llmConfig.timeoutMs,
+      maxRetries: command.llmConfig.maxRetries,
+    });
+  } catch (error: unknown) {
+    if (error instanceof LanguageNormalizationError) {
+      throw new UsageError(error.message);
+    }
+    throw error;
+  }
+
+  const originalContent = runtime.sourceWords.map((word) => word.text).join(" ");
+  let translatedContent: string;
+  try {
+    translatedContent = await translateContentInChunks({
+      content: originalContent,
+      translateChunk: async (chunk) =>
+        runTranslate({
+          provider: command.llmConfig.provider,
+          model: command.llmConfig.model,
+          apiKey: command.llmConfig.apiKey,
+          targetLanguage,
+          input: chunk,
+          timeoutMs: command.llmConfig.timeoutMs,
+          maxRetries: command.llmConfig.maxRetries,
+          signal: command.signal,
+        }),
+    });
+  } catch (error: unknown) {
+    if (error instanceof TranslateRuntimeError) {
+      const provider = sanitizeTerminalText(command.llmConfig.provider);
+      const model = sanitizeTerminalText(command.llmConfig.model);
+      throw new TranslateRuntimeError(
+        `${error.message} (provider=${provider}, model=${model})`,
+        error.stage
+      );
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    throw new TranslateRuntimeError(
+      `Translation failed [runtime]: ${sanitizeTerminalText(message)}`,
+      "runtime"
+    );
+  }
+
+  const translatedWords = tokenize(translatedContent);
+  const { words: transformedWords, modeWordCache } = getWordsForMode(
+    translatedWords,
+    readingMode,
+    { rsvp: translatedWords }
+  );
+  const currentWpm = runtime.reader.currentWpm;
+
+  return {
+    reader: createReader(transformedWords, currentWpm),
+    session: createSession(currentWpm),
+    textScale: runtime.textScale,
+    readingMode,
+    sourceWords: translatedWords,
+    modeWordCache,
+    lineMapCache: null,
+    summary: {
+      enabled: false,
+      preset: DEFAULT_SUMMARY_PRESET,
+      provider: null,
+      model: null,
+      sourceLabel: buildTranslatedSourceLabel(command.sourceLabel, targetLanguage, readingMode),
     },
   };
 }

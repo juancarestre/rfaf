@@ -114,4 +114,73 @@ describe("no-bs llm", () => {
       )
     ).rejects.toThrow("fact preservation check failed");
   });
+
+  it("fails deterministically when English input is translated to Spanish", async () => {
+    await expect(
+      noBsTextWithGenerator(
+        {
+          provider: "openai",
+          model: "gpt-4o-mini",
+          apiKey: "test",
+          input:
+            "Black Sabbath was an English rock band formed in Birmingham in 1968 by guitarist Tony Iommi and bassist Geezer Butler.",
+          timeoutMs: 1000,
+          maxRetries: 0,
+        },
+        async () => ({
+          object: {
+            cleaned_text:
+              "Black Sabbath fue una banda de rock inglesa formada en Birmingham en 1968 por el guitarrista Tony Iommi y el bajista Geezer Butler.",
+          },
+        })
+      )
+    ).rejects.toThrow("language preservation check failed");
+  });
+
+  it("fails deterministically when Spanish input is translated to English", async () => {
+    await expect(
+      noBsTextWithGenerator(
+        {
+          provider: "openai",
+          model: "gpt-4o-mini",
+          apiKey: "test",
+          input:
+            "Black Sabbath fue una banda de rock inglesa formada en Birmingham en 1968 por el guitarrista Tony Iommi y el bajista Geezer Butler.",
+          timeoutMs: 1000,
+          maxRetries: 0,
+        },
+        async () => ({
+          object: {
+            cleaned_text:
+              "Black Sabbath was an English rock band formed in Birmingham in 1968 by guitarist Tony Iommi and bassist Geezer Butler.",
+          },
+        })
+      )
+    ).rejects.toThrow("language preservation check failed");
+  });
+
+  it("fails deterministically when cleaned output is summarized/truncated", async () => {
+    const source =
+      "Black Sabbath was an English rock band formed in Birmingham in 1968 by guitarist Tony Iommi and bassist Geezer Butler. ".repeat(
+        180
+      );
+
+    await expect(
+      noBsTextWithGenerator(
+        {
+          provider: "openai",
+          model: "gpt-4o-mini",
+          apiKey: "test",
+          input: source,
+          timeoutMs: 1000,
+          maxRetries: 0,
+        },
+        async () => ({
+          object: {
+            cleaned_text: "Black Sabbath was an influential heavy metal band from Birmingham.",
+          },
+        })
+      )
+    ).rejects.toThrow("content preservation check failed");
+  });
 });

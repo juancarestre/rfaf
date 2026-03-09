@@ -1,7 +1,7 @@
 ---
 title: "feat: Phase 5 Subphase 21 --translate-to"
 type: feat
-status: active
+status: completed
 date: 2026-03-09
 origin: docs/brainstorms/2026-03-09-rfaf-phase-5-subphase-21-translate-to-brainstorm.md
 ---
@@ -178,15 +178,15 @@ Refactor only with green tests (no behavior changes).
 
 ## Acceptance Criteria
 
-- [ ] `--translate-to` is the only path that changes language (see brainstorm: `docs/brainstorms/2026-03-09-rfaf-phase-5-subphase-21-translate-to-brainstorm.md`).
-- [ ] Target input supports codes + names + variants through hybrid normalization.
-- [ ] Ambiguous and unresolved target cases fail deterministically with distinct contracts.
-- [ ] Stage ordering is enforced: `no-bs -> summary -> translate`.
-- [ ] If source is already target language, translation is skipped deterministically.
-- [ ] Translation failures are fail-closed (no silent untranslated fallback).
-- [ ] CLI and agent translation behavior are parity-aligned in the same subphase.
-- [ ] Tests are written first in each phase (red -> green).
-- [ ] `bun test` and `bun x tsc --noEmit` pass.
+- [x] `--translate-to` is the only path that changes language (see brainstorm: `docs/brainstorms/2026-03-09-rfaf-phase-5-subphase-21-translate-to-brainstorm.md`).
+- [x] Target input supports codes + names + variants through hybrid normalization.
+- [x] Ambiguous and unresolved target cases fail deterministically with distinct contracts.
+- [x] Stage ordering is enforced: `no-bs -> summary -> translate`.
+- [x] If source is already target language, translation is skipped deterministically.
+- [x] Translation failures are fail-closed (no silent untranslated fallback).
+- [x] CLI and agent translation behavior are parity-aligned in the same subphase.
+- [x] Tests are written first in each phase (red -> green).
+- [x] `bun test` and `bun x tsc --noEmit` pass.
 
 ## Success Metrics
 

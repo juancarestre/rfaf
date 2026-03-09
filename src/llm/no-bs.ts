@@ -11,6 +11,7 @@ export const MAX_NO_BS_BYTES = 512 * 1024;
 
 const LANGUAGE_PRESERVATION_FAILURE_REASON = "language preservation check failed";
 const FACT_PRESERVATION_FAILURE_REASON = "fact preservation check failed";
+const CONTENT_PRESERVATION_FAILURE_REASON = "content preservation check failed";
 
 const ENGLISH_MARKER_WORDS = new Set([
   "a",
@@ -37,13 +38,51 @@ const ENGLISH_MARKER_WORDS = new Set([
   "your",
 ]);
 
+const NON_ENGLISH_LATIN_MARKER_WORDS = new Set([
+  // Spanish
+  "que",
+  "los",
+  "las",
+  "para",
+  "como",
+  "una",
+  "con",
+  "del",
+  "por",
+  "de",
+  "el",
+  "la",
+  "en",
+  "y",
+  // French
+  "avec",
+  "dans",
+  "pour",
+  "plus",
+  "sans",
+  "leurs",
+  "ainsi",
+  // Portuguese
+  "uma",
+  "não",
+  "mais",
+  "sobre",
+  // Italian
+  "della",
+  "delle",
+  "degli",
+  "dopo",
+]);
+
 const NON_LATIN_SCRIPT_REGEX =
   /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Cyrillic}\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Devanagari}\p{Script=Thai}\p{Script=Greek}]/u;
 const LATIN_WORD_REGEX = /\p{Script=Latin}+/gu;
+const LATIN_DIACRITIC_REGEX = /[\u00C0-\u024F]/u;
 const TOKEN_REGEX = /\p{Letter}[\p{Letter}\p{Number}_'-]*/gu;
 
 interface SourceProfile {
   hasNonLatinScript: boolean;
+  sourceLanguage: "english" | "non_english_latin" | "non_latin" | "unknown";
   sourceTokens: Set<string>;
   sourceNumbers: Set<string>;
 }
@@ -145,10 +184,10 @@ function latinWords(text: string): string[] {
   return text.toLowerCase().match(LATIN_WORD_REGEX) ?? [];
 }
 
-function countEnglishMarkerHits(words: string[]): number {
+function countMarkerHits(words: string[], markers: Set<string>): number {
   let hits = 0;
   for (const word of words) {
-    if (ENGLISH_MARKER_WORDS.has(word)) {
+    if (markers.has(word)) {
       hits += 1;
     }
   }
@@ -161,14 +200,50 @@ function isHighConfidenceEnglish(text: string): boolean {
     return false;
   }
 
-  const hits = countEnglishMarkerHits(words);
+  const hits = countMarkerHits(words, ENGLISH_MARKER_WORDS);
   return hits >= 3 && hits / words.length >= 0.2;
+}
+
+function isHighConfidenceNonEnglishLatin(text: string): boolean {
+  const words = latinWords(text);
+  if (words.length < 6) {
+    return false;
+  }
+
+  const englishHits = countMarkerHits(words, ENGLISH_MARKER_WORDS);
+  const nonEnglishHits = countMarkerHits(words, NON_ENGLISH_LATIN_MARKER_WORDS);
+
+  if (nonEnglishHits >= 3 && nonEnglishHits > englishHits) {
+    return true;
+  }
+
+  return LATIN_DIACRITIC_REGEX.test(text) && englishHits === 0;
+}
+
+function detectLanguageBucket(
+  text: string
+): "english" | "non_english_latin" | "non_latin" | "unknown" {
+  if (NON_LATIN_SCRIPT_REGEX.test(text)) {
+    return "non_latin";
+  }
+
+  if (isHighConfidenceEnglish(text)) {
+    return "english";
+  }
+
+  if (isHighConfidenceNonEnglishLatin(text)) {
+    return "non_english_latin";
+  }
+
+  return "unknown";
 }
 
 function buildSourceProfile(source: string): SourceProfile {
   const sourceTokens = tokenizeTokens(source);
+  const sourceLanguage = detectLanguageBucket(source);
   return {
-    hasNonLatinScript: NON_LATIN_SCRIPT_REGEX.test(source),
+    hasNonLatinScript: sourceLanguage === "non_latin",
+    sourceLanguage,
     sourceTokens: new Set(sourceTokens),
     sourceNumbers: new Set((source.match(/\d+/g) ?? []).map((value) => value.trim())),
   };
@@ -179,11 +254,21 @@ function violatesLanguagePreservation(profile: SourceProfile, cleaned: string): 
     return false;
   }
 
-  if (!profile.hasNonLatinScript) {
+  const cleanedLanguage = detectLanguageBucket(cleaned);
+
+  if (profile.sourceLanguage === "unknown") {
     return false;
   }
 
-  return isHighConfidenceEnglish(cleaned);
+  if (profile.sourceLanguage === "non_latin") {
+    return cleanedLanguage !== "non_latin";
+  }
+
+  if (profile.sourceLanguage === "english") {
+    return cleanedLanguage === "non_english_latin" || cleanedLanguage === "non_latin";
+  }
+
+  return cleanedLanguage === "english" || cleanedLanguage === "non_latin";
 }
 
 function tokenizeTokens(text: string): string[] {
@@ -220,6 +305,31 @@ function violatesFactPreservation(profile: SourceProfile, cleaned: string): bool
   return overlap / cleanedSet.size < 0.4;
 }
 
+function violatesContentPreservation(source: string, cleaned: string): boolean {
+  const sourceTrimmed = source.trim();
+  const cleanedTrimmed = cleaned.trim();
+
+  if (!sourceTrimmed || !cleanedTrimmed) {
+    return false;
+  }
+
+  const sourceBytes = Buffer.byteLength(sourceTrimmed, "utf8");
+  if (sourceBytes < 1_200) {
+    return false;
+  }
+
+  const cleanedBytes = Buffer.byteLength(cleanedTrimmed, "utf8");
+  const byteRatio = cleanedBytes / sourceBytes;
+  if (byteRatio < 0.2) {
+    return true;
+  }
+
+  const sourceParagraphs = sourceTrimmed.split(/\n{2,}/).filter(Boolean).length;
+  const cleanedParagraphs = cleanedTrimmed.split(/\n{2,}/).filter(Boolean).length;
+
+  return sourceParagraphs >= 4 && cleanedParagraphs <= 1 && byteRatio < 0.45;
+}
+
 function isTransientRuntimeError(error: unknown): boolean {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
 
@@ -250,6 +360,13 @@ function classifyRuntimeError(error: unknown): NoBsRuntimeError {
   if (lower.includes(FACT_PRESERVATION_FAILURE_REASON)) {
     return new NoBsRuntimeError(
       "No-BS failed [schema]: fact preservation check failed; cleaned text introduced unsupported claims.",
+      "schema"
+    );
+  }
+
+  if (lower.includes(CONTENT_PRESERVATION_FAILURE_REASON)) {
+    return new NoBsRuntimeError(
+      "No-BS failed [schema]: content preservation check failed; cleaned text appears summarized or truncated.",
       "schema"
     );
   }
@@ -333,6 +450,13 @@ export async function noBsTextWithGenerator(
       if (violatesFactPreservation(sourceProfile, normalized)) {
         throw new NoBsRuntimeError(
           "No-BS failed [schema]: fact preservation check failed; cleaned text introduced unsupported claims.",
+          "schema"
+        );
+      }
+
+      if (violatesContentPreservation(input.input, normalized)) {
+        throw new NoBsRuntimeError(
+          `No-BS failed [schema]: ${CONTENT_PRESERVATION_FAILURE_REASON}; cleaned text appears summarized or truncated.`,
           "schema"
         );
       }

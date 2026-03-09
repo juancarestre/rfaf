@@ -9,9 +9,17 @@ import {
   executeAgentIngestUrlCommand,
   executeAgentNoBsCommand,
   executeAgentSummarizeCommand,
+  executeAgentTranslateCommand,
   getAgentReaderState,
 } from "../../src/agent/reader-api";
-import { NoBsRuntimeError, SummarizeRuntimeError } from "../../src/cli/errors";
+import {
+  NoBsRuntimeError,
+  SummarizeRuntimeError,
+  TranslateRuntimeError,
+  UsageError,
+} from "../../src/cli/errors";
+import { LanguageNormalizationError } from "../../src/llm/language-normalizer";
+import { tokenize } from "../../src/processor/tokenizer";
 import type { Word } from "../../src/processor/types";
 
 function words(): Word[] {
@@ -159,6 +167,211 @@ describe("agent reader api", () => {
     expect(state.totalWords).toBeGreaterThan(3);
   });
 
+  it("supports translate then read through agent API", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    const translatedRuntime = await executeAgentTranslateCommand(
+      runtime,
+      {
+        target: "spanish",
+        sourceLabel: "stdin",
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async () => "es",
+      async () => "primera segunda tercera cuarta"
+    );
+
+    const state = getAgentReaderState(translatedRuntime);
+    expect(state.currentWpm).toBe(320);
+    expect(state.summaryEnabled).toBe(false);
+    expect(state.summarySourceLabel).toBe("stdin (translated:es)");
+    expect(state.totalWords).toBe(4);
+  });
+
+  it("maps unresolved translate targets to usage errors for parity", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    await expect(
+      executeAgentTranslateCommand(
+        runtime,
+        {
+          target: "zzzzzz",
+          sourceLabel: "stdin",
+          llmConfig: {
+            provider: "openai",
+            model: "gpt-5-mini",
+            apiKey: "test",
+            timeoutMs: 1_000,
+            maxRetries: 0,
+          },
+        },
+        async () => {
+          throw new LanguageNormalizationError(
+            "TARGET_UNRESOLVED",
+            "Unresolved --translate-to target. Use a different language value."
+          );
+        }
+      )
+    ).rejects.toMatchObject({
+      name: "UsageError",
+      message: "Unresolved --translate-to target. Use a different language value.",
+    } satisfies Partial<UsageError>);
+  });
+
+  it("fails closed on translate runtime provider errors", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    await expect(
+      executeAgentTranslateCommand(
+        runtime,
+        {
+          target: "es",
+          sourceLabel: "stdin",
+          llmConfig: {
+            provider: "openai",
+            model: "gpt-5-mini",
+            apiKey: "test",
+            timeoutMs: 1_000,
+            maxRetries: 0,
+          },
+        },
+        async () => "es",
+        async () => {
+          throw new TranslateRuntimeError(
+            "Translation failed [provider]: target language is not supported by provider/model.",
+            "provider"
+          );
+        }
+      )
+    ).rejects.toMatchObject({
+      name: "TranslateRuntimeError",
+      stage: "provider",
+    } satisfies Partial<TranslateRuntimeError>);
+
+    await expect(
+      executeAgentTranslateCommand(
+        runtime,
+        {
+          target: "es",
+          sourceLabel: "stdin",
+          llmConfig: {
+            provider: "openai",
+            model: "gpt-5-mini",
+            apiKey: "test",
+            timeoutMs: 1_000,
+            maxRetries: 0,
+          },
+        },
+        async () => "es",
+        async () => {
+          throw new TranslateRuntimeError(
+            "Translation failed [provider]: target language is not supported by provider/model.",
+            "provider"
+          );
+        }
+      )
+    ).rejects.toThrow("provider=openai");
+  });
+
+  it("chunks large translate input in agent path for parity", async () => {
+    const runtime = createAgentReaderRuntime(tokenize("alpha beta gamma ".repeat(6_000)), 320);
+    const chunkInputs: string[] = [];
+
+    await executeAgentTranslateCommand(
+      runtime,
+      {
+        target: "es",
+        sourceLabel: "stdin",
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async () => "es",
+      async ({ input }) => {
+        chunkInputs.push(input);
+        return `tr:${input.slice(0, 12)}`;
+      }
+    );
+
+    expect(chunkInputs.length).toBeGreaterThan(1);
+  });
+
+  it("forwards signal through summarize/no-bs/translate agent commands", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+    const controller = new AbortController();
+
+    await executeAgentSummarizeCommand(
+      runtime,
+      {
+        preset: "short",
+        sourceLabel: "stdin",
+        signal: controller.signal,
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async ({ signal }) => {
+        expect(signal).toBe(controller.signal);
+        return "summary output";
+      }
+    );
+
+    await executeAgentNoBsCommand(
+      runtime,
+      {
+        sourceLabel: "stdin",
+        signal: controller.signal,
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async ({ signal }) => {
+        expect(signal).toBe(controller.signal);
+        return "cleaned output";
+      },
+      () => "cleaned output"
+    );
+
+    await executeAgentTranslateCommand(
+      runtime,
+      {
+        target: "es",
+        sourceLabel: "stdin",
+        signal: controller.signal,
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async () => "es",
+      async ({ signal }) => {
+        expect(signal).toBe(controller.signal);
+        return "texto traducido";
+      }
+    );
+  });
+
   it("applies deterministic cleaner output before no-bs LLM stage", async () => {
     const runtime = createAgentReaderRuntime(words(), 320);
 
@@ -236,9 +449,29 @@ describe("agent reader api", () => {
     ).rejects.toMatchObject({
       name: "NoBsRuntimeError",
       stage: "schema",
-      message:
-        "No-BS failed [schema]: language preservation check failed; cleaned text language differs from source.",
     });
+
+    await expect(
+      executeAgentNoBsCommand(
+        runtime,
+        {
+          sourceLabel: "stdin",
+          llmConfig: {
+            provider: "openai",
+            model: "gpt-5-mini",
+            apiKey: "test",
+            timeoutMs: 1_000,
+            maxRetries: 0,
+          },
+        },
+        async () => {
+          throw new NoBsRuntimeError(
+            "No-BS failed [schema]: language preservation check failed; cleaned text language differs from source.",
+            "schema"
+          );
+        }
+      )
+    ).rejects.toThrow("provider=openai");
   });
 
   it("surfaces deterministic language-preservation summarize failure for agent parity", async () => {
@@ -268,8 +501,30 @@ describe("agent reader api", () => {
     ).rejects.toMatchObject({
       name: "SummarizeRuntimeError",
       stage: "schema",
-      message: "Summarization failed [schema]: language preservation check failed; summary language differs from source text.",
     });
+
+    await expect(
+      executeAgentSummarizeCommand(
+        runtime,
+        {
+          preset: "short",
+          sourceLabel: "stdin",
+          llmConfig: {
+            provider: "openai",
+            model: "gpt-5-mini",
+            apiKey: "test",
+            timeoutMs: 1_000,
+            maxRetries: 0,
+          },
+        },
+        async () => {
+          throw new SummarizeRuntimeError(
+            "Summarization failed [schema]: language preservation check failed; summary language differs from source text.",
+            "schema"
+          );
+        }
+      )
+    ).rejects.toThrow("provider=openai");
   });
 
   it("supports URL ingest through agent API with runtime defaults/overrides", async () => {

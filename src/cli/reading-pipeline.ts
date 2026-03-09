@@ -6,12 +6,14 @@ import type { Word } from "../processor/types";
 import type { ReadingMode } from "./mode-option";
 import type { NoBsOption } from "./no-bs-option";
 import type { SummaryOption } from "./summary-option";
+import type { TranslateOption } from "./translate-option";
 
 interface ReadingPipelineInput {
   documentContent: string;
   sourceLabel: string;
   noBsOption?: NoBsOption;
   summaryOption: SummaryOption;
+  translateOption?: TranslateOption;
   mode: ReadingMode;
 }
 
@@ -25,6 +27,11 @@ interface ReadingPipelineDeps {
     documentContent: string;
     sourceLabel: string;
     summaryOption: SummaryOption;
+  }) => Promise<{ readingContent: string; sourceLabel: string }>;
+  translateBefore?: (input: {
+    documentContent: string;
+    sourceLabel: string;
+    translateOption: TranslateOption;
   }) => Promise<{ readingContent: string; sourceLabel: string }>;
   tokenizeFn?: typeof tokenize;
   chunkFn?: typeof chunkWords;
@@ -93,7 +100,31 @@ export async function buildReadingPipeline(
         sourceLabel: noBsResult.sourceLabel,
       };
 
-  const tokenized = tokenizeFn(summaryResult.readingContent);
+  const translateResult = input.translateOption?.enabled
+    ? await (async () => {
+        const translate =
+          deps.translateBefore ??
+          (async (translateInput: {
+            documentContent: string;
+            sourceLabel: string;
+            translateOption: TranslateOption;
+          }) => {
+            const { translateBeforeRsvp } = await import("./translate-flow");
+            return translateBeforeRsvp(translateInput);
+          });
+
+        return translate({
+          documentContent: summaryResult.readingContent,
+          sourceLabel: summaryResult.sourceLabel,
+          translateOption: input.translateOption ?? { enabled: false, target: null },
+        });
+      })()
+    : {
+        readingContent: summaryResult.readingContent,
+        sourceLabel: summaryResult.sourceLabel,
+      };
+
+  const tokenized = tokenizeFn(translateResult.readingContent);
   const words =
     deps.chunkFn || deps.bionicFn
       ? input.mode === "chunked"
@@ -106,6 +137,6 @@ export async function buildReadingPipeline(
   return {
     words,
     sourceWords: tokenized,
-    sourceLabel: summaryResult.sourceLabel,
+    sourceLabel: translateResult.sourceLabel,
   };
 }
