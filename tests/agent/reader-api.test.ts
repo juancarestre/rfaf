@@ -187,6 +187,25 @@ describe("agent reader api", () => {
     expect(state.readingMode).toBe("chunked");
   });
 
+  it("supports EPUB file ingest through agent API", async () => {
+    const result = await executeAgentIngestFileCommand(
+      {
+        path: "tests/fixtures/sample.epub",
+      },
+      async (path: string) => {
+        expect(path).toBe("tests/fixtures/sample.epub");
+        return {
+          content: "chapter one chapter two",
+          source: "sample.epub",
+          wordCount: 4,
+        };
+      }
+    );
+
+    expect(result.sourceLabel).toBe("sample.epub");
+    expect(result.wordCount).toBe(4);
+  });
+
   it("fails closed for invalid mode payload in ingest_file command", async () => {
     let readFileCalls = 0;
 
@@ -268,6 +287,43 @@ describe("agent reader api", () => {
     }
   });
 
+  it("maps known EPUB ingest failures to stable agent error codes", async () => {
+    const cases = [
+      {
+        error: new Error("Invalid or corrupted EPUB file"),
+        code: "EPUB_INVALID",
+      },
+      {
+        error: new Error("EPUB is encrypted or DRM-protected"),
+        code: "EPUB_ENCRYPTED",
+      },
+      {
+        error: new Error("EPUB has no extractable text"),
+        code: "EPUB_EMPTY_TEXT",
+      },
+      {
+        error: new Error("EPUB parsing timed out"),
+        code: "EPUB_PARSE_FAILED",
+      },
+    ] as const;
+
+    for (const entry of cases) {
+      await expect(
+        executeAgentIngestFileCommand(
+          {
+            path: "tests/fixtures/sample.epub",
+          },
+          async () => {
+            throw entry.error;
+          }
+        )
+      ).rejects.toMatchObject({
+        name: "AgentIngestFileError",
+        code: entry.code,
+      });
+    }
+  });
+
   it("normalizes unknown ingest failures to deterministic parse error class", async () => {
     await expect(
       executeAgentIngestFileCommand(
@@ -282,6 +338,21 @@ describe("agent reader api", () => {
       name: "AgentIngestFileError",
       code: "PDF_PARSE_FAILED",
       message: "Failed to parse PDF file",
+    } satisfies Partial<AgentIngestFileError>);
+
+    await expect(
+      executeAgentIngestFileCommand(
+        {
+          path: "tests/fixtures/sample.epub",
+        },
+        async () => {
+          throw new Error("unexpected epub parser panic");
+        }
+      )
+    ).rejects.toMatchObject({
+      name: "AgentIngestFileError",
+      code: "EPUB_PARSE_FAILED",
+      message: "Failed to parse EPUB file",
     } satisfies Partial<AgentIngestFileError>);
 
     await expect(

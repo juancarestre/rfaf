@@ -25,7 +25,7 @@ describe("help CLI contract", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe("");
     expect(result.stdout).toContain("rfaf [input] [options]");
-    expect(result.stdout).toContain("Plaintext/PDF file path or article URL (http/https)");
+    expect(result.stdout).toContain("Plaintext/PDF/EPUB file path or article URL (http/https)");
     expect(result.stdout).toContain("https://example.com/article");
     expect(result.stdout).toContain("--summary=medium --mode");
     expect(result.stdout).toContain("Runtime controls:");

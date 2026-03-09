@@ -138,8 +138,12 @@ export type AgentIngestFileErrorCode =
   | "PDF_INVALID"
   | "PDF_ENCRYPTED"
   | "PDF_EMPTY_TEXT"
+  | "EPUB_INVALID"
+  | "EPUB_ENCRYPTED"
+  | "EPUB_EMPTY_TEXT"
   | "INPUT_TOO_LARGE"
-  | "PDF_PARSE_FAILED";
+  | "PDF_PARSE_FAILED"
+  | "EPUB_PARSE_FAILED";
 
 export class AgentIngestFileError extends Error {
   code: AgentIngestFileErrorCode;
@@ -303,7 +307,7 @@ export async function executeAgentIngestFileCommand(
   try {
     document = await readFileSourceFn(command.path);
   } catch (error: unknown) {
-    throw toAgentIngestFileError(error);
+    throw toAgentIngestFileError(error, command.path);
   }
 
   const runtime = createAgentReaderRuntime(
@@ -320,7 +324,14 @@ export async function executeAgentIngestFileCommand(
   };
 }
 
-function toAgentIngestFileError(error: unknown): AgentIngestFileError {
+function isEpubPath(path: string): boolean {
+  return path.toLowerCase().endsWith(".epub");
+}
+
+function toAgentIngestFileError(
+  error: unknown,
+  sourcePath?: string
+): AgentIngestFileError {
   const message = error instanceof Error ? error.message : String(error);
 
   if (message === "File not found") {
@@ -339,8 +350,28 @@ function toAgentIngestFileError(error: unknown): AgentIngestFileError {
     return new AgentIngestFileError("PDF_EMPTY_TEXT", message);
   }
 
+  if (message === "Invalid or corrupted EPUB file") {
+    return new AgentIngestFileError("EPUB_INVALID", message);
+  }
+
+  if (message === "EPUB is encrypted or DRM-protected") {
+    return new AgentIngestFileError("EPUB_ENCRYPTED", message);
+  }
+
+  if (message === "EPUB has no extractable text") {
+    return new AgentIngestFileError("EPUB_EMPTY_TEXT", message);
+  }
+
   if (message === "Input exceeds maximum supported size") {
     return new AgentIngestFileError("INPUT_TOO_LARGE", message);
+  }
+
+  if (message === "EPUB parsing timed out" || message === "Failed to parse EPUB file") {
+    return new AgentIngestFileError("EPUB_PARSE_FAILED", "Failed to parse EPUB file");
+  }
+
+  if (sourcePath && isEpubPath(sourcePath)) {
+    return new AgentIngestFileError("EPUB_PARSE_FAILED", "Failed to parse EPUB file");
   }
 
   return new AgentIngestFileError("PDF_PARSE_FAILED", "Failed to parse PDF file");

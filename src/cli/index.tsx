@@ -173,7 +173,7 @@ async function main() {
     .usage("$0 [input] [options]")
     .positional("input", {
       type: "string",
-      describe: "Plaintext/PDF file path or article URL (http/https)",
+      describe: "Plaintext/PDF/EPUB file path or article URL (http/https)",
     })
     .option("wpm", {
       type: "number",

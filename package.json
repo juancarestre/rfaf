@@ -19,6 +19,7 @@
     "@ai-sdk/openai": "^3.0.41",
     "@mozilla/readability": "^0.6.0",
     "ai": "^6.0.116",
+    "epub2": "^3.0.2",
     "ink": "^6.0.0",
     "linkedom": "^0.18.12",
     "pdf-parse": "^2.4.5",

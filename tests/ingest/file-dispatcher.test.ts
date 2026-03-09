@@ -3,6 +3,49 @@ import { resolveInputSource } from "../../src/ingest/detect";
 import { readFileSource } from "../../src/ingest/file-dispatcher";
 
 describe("readFileSource", () => {
+  it("routes .epub files to EPUB ingestor", async () => {
+    const calls: string[] = [];
+
+    const document = await readFileSource("tests/fixtures/sample.epub", {
+      readEpubFile: async (path: string) => {
+        calls.push(`epub:${path}`);
+        return { content: "epub", source: path, wordCount: 1 };
+      },
+      readPdfFile: async (path: string) => {
+        calls.push(`pdf:${path}`);
+        return { content: "pdf", source: path, wordCount: 1 };
+      },
+      readPlaintextFile: async (path: string) => {
+        calls.push(`txt:${path}`);
+        return { content: "txt", source: path, wordCount: 1 };
+      },
+    });
+
+    expect(calls).toEqual(["epub:tests/fixtures/sample.epub"]);
+    expect(document.content).toBe("epub");
+  });
+
+  it("routes .EPUB files case-insensitively to EPUB ingestor", async () => {
+    const calls: string[] = [];
+
+    await readFileSource("tests/fixtures/SAMPLE.EPUB", {
+      readEpubFile: async (path: string) => {
+        calls.push(`epub:${path}`);
+        return { content: "epub", source: path, wordCount: 1 };
+      },
+      readPdfFile: async (path: string) => {
+        calls.push(`pdf:${path}`);
+        return { content: "pdf", source: path, wordCount: 1 };
+      },
+      readPlaintextFile: async (path: string) => {
+        calls.push(`txt:${path}`);
+        return { content: "txt", source: path, wordCount: 1 };
+      },
+    });
+
+    expect(calls).toEqual(["epub:tests/fixtures/SAMPLE.EPUB"]);
+  });
+
   it("routes .pdf files to PDF ingestor", async () => {
     const calls: string[] = [];
 
@@ -55,6 +98,44 @@ describe("readFileSource", () => {
 
     expect(loadPdfCalls).toBe(0);
     expect(document.content).toBe("txt");
+  });
+
+  it("loads EPUB reader lazily only for EPUB paths", async () => {
+    let loadEpubCalls = 0;
+
+    const document = await readFileSource("tests/fixtures/sample.txt", {
+      loadEpubFileReader: async () => {
+        loadEpubCalls += 1;
+        return async (path: string) => ({ content: "epub", source: path, wordCount: 1 });
+      },
+      readPlaintextFile: async (path: string) => ({
+        content: "txt",
+        source: path,
+        wordCount: 1,
+      }),
+    });
+
+    expect(loadEpubCalls).toBe(0);
+    expect(document.content).toBe("txt");
+  });
+
+  it("uses lazy loader for EPUB paths when no direct reader override is provided", async () => {
+    let loadEpubCalls = 0;
+
+    const document = await readFileSource("tests/fixtures/sample.epub", {
+      loadEpubFileReader: async () => {
+        loadEpubCalls += 1;
+        return async (path: string) => ({ content: "epub", source: path, wordCount: 1 });
+      },
+      readPlaintextFile: async (path: string) => ({
+        content: "txt",
+        source: path,
+        wordCount: 1,
+      }),
+    });
+
+    expect(loadEpubCalls).toBe(1);
+    expect(document.content).toBe("epub");
   });
 
   it("uses lazy loader for PDF paths when no direct reader override is provided", async () => {

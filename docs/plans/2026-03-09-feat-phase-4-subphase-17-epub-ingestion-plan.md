@@ -1,7 +1,7 @@
 ---
 title: "feat: Add EPUB ingestion with dispatcher-based file routing"
 type: feat
-status: active
+status: completed
 date: 2026-03-09
 origin: docs/brainstorms/2026-03-09-rfaf-phase-4-subphase-17-epub-ingestion-brainstorm.md
 ---
@@ -155,35 +155,35 @@ Chosen approach carries forward dispatcher + YAGNI decisions directly from brain
 
 ### Functional Requirements
 
-- [ ] `rfaf <local.epub>` ingests EPUB and starts reading.
-- [ ] EPUB content is extracted as whole-book text in spine order (see brainstorm origin).
-- [ ] Dispatcher routes `.epub` case-insensitively and keeps non-EPUB behavior unchanged.
-- [ ] No remote EPUB URL support is introduced in this subphase.
-- [ ] No chapter-selection UI or interactive recovery prompts are introduced.
-- [ ] CLI and agent file-ingest surfaces both support EPUB in the same subphase.
+- [x] `rfaf <local.epub>` ingests EPUB and starts reading.
+- [x] EPUB content is extracted as whole-book text in spine order (see brainstorm origin).
+- [x] Dispatcher routes `.epub` case-insensitively and keeps non-EPUB behavior unchanged.
+- [x] No remote EPUB URL support is introduced in this subphase.
+- [x] No chapter-selection UI or interactive recovery prompts are introduced.
+- [x] CLI and agent file-ingest surfaces both support EPUB in the same subphase.
 
 ### Deterministic Failure Requirements
 
-- [ ] Missing file, corrupt/invalid EPUB, unsupported/encrypted EPUB, no-text EPUB, oversize input, timeout/parse failures all return stable deterministic outcomes.
-- [ ] Unknown parser errors normalize to one stable fallback class.
-- [ ] URL-like inputs ending in `.epub` still follow URL detection semantics from `src/ingest/detect.ts`.
+- [x] Missing file, corrupt/invalid EPUB, unsupported/encrypted EPUB, no-text EPUB, oversize input, timeout/parse failures all return stable deterministic outcomes.
+- [x] Unknown parser errors normalize to one stable fallback class.
+- [x] URL-like inputs ending in `.epub` still follow URL detection semantics from `src/ingest/detect.ts`.
 
 ### Non-Functional Requirements
 
-- [ ] Raw size guard is enforced before expensive extraction.
-- [ ] Extracted text size guard is enforced before pipeline creation.
-- [ ] Lazy-loading prevents EPUB parser initialization on non-EPUB runs.
-- [ ] Terminal-bound source/error text is sanitized.
+- [x] Raw size guard is enforced before expensive extraction.
+- [x] Extracted text size guard is enforced before pipeline creation.
+- [x] Lazy-loading prevents EPUB parser initialization on non-EPUB runs.
+- [x] Terminal-bound source/error text is sanitized.
 
 ### Quality Gates (TDD-First)
 
-- [ ] Tests are authored first in each phase (red -> green -> refactor).
-- [ ] `tests/ingest/epub.test.ts` covers happy path + full failure matrix.
-- [ ] `tests/ingest/file-dispatcher.test.ts` covers EPUB routing + lazy-load contract.
-- [ ] CLI EPUB contract + PTY tests pass.
-- [ ] Agent parity/error-contract tests pass.
-- [ ] `bun test` passes.
-- [ ] `bun x tsc --noEmit` passes.
+- [x] Tests are authored first in each phase (red -> green -> refactor).
+- [x] `tests/ingest/epub.test.ts` covers happy path + full failure matrix.
+- [x] `tests/ingest/file-dispatcher.test.ts` covers EPUB routing + lazy-load contract.
+- [x] CLI EPUB contract + PTY tests pass.
+- [x] Agent parity/error-contract tests pass.
+- [x] `bun test` passes.
+- [x] `bun x tsc --noEmit` passes.
 
 ## Success Metrics
 
