@@ -1,7 +1,7 @@
 ---
 title: "feat: Add markdown readability ingestion with deterministic contracts"
 type: feat
-status: active
+status: completed
 date: 2026-03-09
 origin: docs/brainstorms/2026-03-09-rfaf-phase-4-subphase-18-markdown-readability-brainstorm.md
 ---
@@ -160,36 +160,36 @@ This carries forward the brainstorm’s selected approach: markdown normalizer +
 
 ### Functional Requirements
 
-- [ ] `rfaf <local.md>` and `rfaf <local.markdown>` ingest markdown and start reading.
-- [ ] Markdown ingest returns clean prose output while preserving headings + list cues (see brainstorm).
-- [ ] Fenced code blocks collapse to deterministic placeholders.
-- [ ] Links are textified and image/table constructs are replaced with deterministic placeholders.
-- [ ] Mode parity is preserved across `rsvp`, `chunked`, `bionic`, and `scroll` (see brainstorm).
-- [ ] No new markdown-specific runtime mode or rich markdown renderer is introduced (see brainstorm).
+- [x] `rfaf <local.md>` and `rfaf <local.markdown>` ingest markdown and start reading.
+- [x] Markdown ingest returns clean prose output while preserving headings + list cues (see brainstorm).
+- [x] Fenced code blocks collapse to deterministic placeholders.
+- [x] Links are textified and image/table constructs are replaced with deterministic placeholders.
+- [x] Mode parity is preserved across `rsvp`, `chunked`, `bionic`, and `scroll` (see brainstorm).
+- [x] No new markdown-specific runtime mode or rich markdown renderer is introduced (see brainstorm).
 
 ### Deterministic Failure Requirements
 
-- [ ] Missing markdown files fail with deterministic file-ingest error semantics.
-- [ ] Malformed markdown never crashes ingest and yields deterministic behavior.
-- [ ] Empty normalized markdown content fails with deterministic markdown-empty error.
-- [ ] Unknown parser failures normalize to a markdown-specific stable fallback class.
-- [ ] URL-like markdown paths with `http(s)://` still follow URL detection semantics from `src/ingest/detect.ts`.
+- [x] Missing markdown files fail with deterministic file-ingest error semantics.
+- [x] Malformed markdown never crashes ingest and yields deterministic behavior.
+- [x] Empty normalized markdown content fails with deterministic markdown-empty error.
+- [x] Unknown parser failures normalize to a markdown-specific stable fallback class.
+- [x] URL-like markdown paths with `http(s)://` still follow URL detection semantics from `src/ingest/detect.ts`.
 
 ### Non-Functional Requirements
 
-- [ ] Raw and normalized size guards use canonical message `Input exceeds maximum supported size`.
-- [ ] Terminal-bound source/error text remains sanitized.
-- [ ] Dispatcher remains minimal (routing only, no parser logic leakage).
+- [x] Raw and normalized size guards use canonical message `Input exceeds maximum supported size`.
+- [x] Terminal-bound source/error text remains sanitized.
+- [x] Dispatcher remains minimal (routing only, no parser logic leakage).
 
 ### Quality Gates (TDD-First)
 
-- [ ] Tests are written first in each phase (red -> green -> refactor).
-- [ ] `tests/ingest/markdown.test.ts` covers normalization and failure matrix.
-- [ ] Dispatcher routing and case-insensitive extension behavior are contract-tested.
-- [ ] CLI markdown contract + PTY tests pass.
-- [ ] Agent parity/error-contract tests pass.
-- [ ] `bun test` passes.
-- [ ] `bun x tsc --noEmit` passes.
+- [x] Tests are written first in each phase (red -> green -> refactor).
+- [x] `tests/ingest/markdown.test.ts` covers normalization and failure matrix.
+- [x] Dispatcher routing and case-insensitive extension behavior are contract-tested.
+- [x] CLI markdown contract + PTY tests pass.
+- [x] Agent parity/error-contract tests pass.
+- [x] `bun test` passes.
+- [x] `bun x tsc --noEmit` passes.
 
 ## Success Metrics
 

@@ -2,11 +2,18 @@ import { readPlaintextFile } from "./plaintext";
 import type { Document } from "./types";
 
 interface ReadFileSourceOptions {
+  loadMarkdownFileReader?: () => Promise<(path: string) => Promise<Document>>;
   loadEpubFileReader?: () => Promise<(path: string) => Promise<Document>>;
   loadPdfFileReader?: () => Promise<(path: string) => Promise<Document>>;
+  readMarkdownFile?: (path: string) => Promise<Document>;
   readEpubFile?: (path: string) => Promise<Document>;
   readPdfFile?: (path: string) => Promise<Document>;
   readPlaintextFile?: (path: string) => Promise<Document>;
+}
+
+function isMarkdownPath(path: string): boolean {
+  const lowerPath = path.toLowerCase();
+  return lowerPath.endsWith(".md") || lowerPath.endsWith(".markdown");
 }
 
 function isEpubPath(path: string): boolean {
@@ -22,6 +29,14 @@ export async function readFileSource(
   options: ReadFileSourceOptions = {}
 ): Promise<Document> {
   const readPlaintext = options.readPlaintextFile ?? readPlaintextFile;
+
+  if (isMarkdownPath(path)) {
+    const readMarkdown =
+      options.readMarkdownFile ??
+      (await (options.loadMarkdownFileReader ?? loadMarkdownFileReader)());
+
+    return readMarkdown(path);
+  }
 
   if (isEpubPath(path)) {
     const readEpub =
@@ -50,4 +65,9 @@ async function loadPdfFileReader(): Promise<(path: string) => Promise<Document>>
 async function loadEpubFileReader(): Promise<(path: string) => Promise<Document>> {
   const module = await import("./epub");
   return module.readEpubFile;
+}
+
+async function loadMarkdownFileReader(): Promise<(path: string) => Promise<Document>> {
+  const module = await import("./markdown");
+  return module.readMarkdownFile;
 }

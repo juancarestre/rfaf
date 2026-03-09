@@ -41,6 +41,18 @@ describe("resolveInputSource", () => {
     }
   });
 
+  it("treats markdown-looking https urls as url input", () => {
+    const result = resolveInputSource({
+      fileArg: "https://example.com/readme.md",
+      stdinIsPiped: false,
+    });
+
+    expect(result.kind).toBe("url");
+    if (result.kind === "url") {
+      expect(result.url).toBe("https://example.com/readme.md");
+    }
+  });
+
   it("detects http url arguments", () => {
     const result = resolveInputSource({
       fileArg: "http://example.com/article",

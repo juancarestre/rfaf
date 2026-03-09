@@ -41,6 +41,7 @@ import {
 } from "../processor/line-computation";
 import { tokenize } from "../processor/tokenizer";
 import type { Word } from "../processor/types";
+import { IngestFileError } from "../ingest/errors";
 import { readUrl, type ReadUrlOptions } from "../ingest/url";
 import { readFileSource } from "../ingest/file-dispatcher";
 
@@ -135,15 +136,19 @@ export interface AgentIngestFileResult {
 
 export type AgentIngestFileErrorCode =
   | "FILE_NOT_FOUND"
+  | "BINARY_FILE"
   | "PDF_INVALID"
   | "PDF_ENCRYPTED"
   | "PDF_EMPTY_TEXT"
   | "EPUB_INVALID"
   | "EPUB_ENCRYPTED"
   | "EPUB_EMPTY_TEXT"
+  | "MARKDOWN_BINARY"
+  | "MARKDOWN_EMPTY_TEXT"
   | "INPUT_TOO_LARGE"
   | "PDF_PARSE_FAILED"
-  | "EPUB_PARSE_FAILED";
+  | "EPUB_PARSE_FAILED"
+  | "MARKDOWN_PARSE_FAILED";
 
 export class AgentIngestFileError extends Error {
   code: AgentIngestFileErrorCode;
@@ -328,10 +333,35 @@ function isEpubPath(path: string): boolean {
   return path.toLowerCase().endsWith(".epub");
 }
 
+function isMarkdownPath(path: string): boolean {
+  const lowerPath = path.toLowerCase();
+  return lowerPath.endsWith(".md") || lowerPath.endsWith(".markdown");
+}
+
 function toAgentIngestFileError(
   error: unknown,
   sourcePath?: string
 ): AgentIngestFileError {
+  if (error instanceof IngestFileError) {
+    switch (error.code) {
+      case "FILE_NOT_FOUND":
+        return new AgentIngestFileError("FILE_NOT_FOUND", error.message);
+      case "INPUT_TOO_LARGE":
+        return new AgentIngestFileError("INPUT_TOO_LARGE", error.message);
+      case "BINARY_FILE":
+        if (sourcePath && isMarkdownPath(sourcePath)) {
+          return new AgentIngestFileError("MARKDOWN_BINARY", error.message);
+        }
+        return new AgentIngestFileError("BINARY_FILE", error.message);
+      case "MARKDOWN_EMPTY_TEXT":
+        return new AgentIngestFileError("MARKDOWN_EMPTY_TEXT", error.message);
+      case "MARKDOWN_PARSE_FAILED":
+        return new AgentIngestFileError("MARKDOWN_PARSE_FAILED", "Failed to parse Markdown file");
+      default:
+        break;
+    }
+  }
+
   const message = error instanceof Error ? error.message : String(error);
 
   if (message === "File not found") {
@@ -362,12 +392,31 @@ function toAgentIngestFileError(
     return new AgentIngestFileError("EPUB_EMPTY_TEXT", message);
   }
 
+  if (message === "Markdown has no readable text") {
+    return new AgentIngestFileError("MARKDOWN_EMPTY_TEXT", message);
+  }
+
+  if (message === "Binary file detected") {
+    if (sourcePath && isMarkdownPath(sourcePath)) {
+      return new AgentIngestFileError("MARKDOWN_BINARY", message);
+    }
+    return new AgentIngestFileError("BINARY_FILE", message);
+  }
+
   if (message === "Input exceeds maximum supported size") {
     return new AgentIngestFileError("INPUT_TOO_LARGE", message);
   }
 
   if (message === "EPUB parsing timed out" || message === "Failed to parse EPUB file") {
     return new AgentIngestFileError("EPUB_PARSE_FAILED", "Failed to parse EPUB file");
+  }
+
+  if (message === "Markdown parsing timed out" || message === "Failed to parse Markdown file") {
+    return new AgentIngestFileError("MARKDOWN_PARSE_FAILED", "Failed to parse Markdown file");
+  }
+
+  if (sourcePath && isMarkdownPath(sourcePath)) {
+    return new AgentIngestFileError("MARKDOWN_PARSE_FAILED", "Failed to parse Markdown file");
   }
 
   if (sourcePath && isEpubPath(sourcePath)) {

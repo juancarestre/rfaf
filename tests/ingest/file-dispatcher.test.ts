@@ -2,178 +2,132 @@ import { describe, expect, it } from "bun:test";
 import { resolveInputSource } from "../../src/ingest/detect";
 import { readFileSource } from "../../src/ingest/file-dispatcher";
 
+function reader(prefix: string, content: string, calls: string[]) {
+  return async (path: string) => {
+    calls.push(`${prefix}:${path}`);
+    return {
+      content,
+      source: path,
+      wordCount: 1,
+    };
+  };
+}
+
 describe("readFileSource", () => {
-  it("routes .epub files to EPUB ingestor", async () => {
-    const calls: string[] = [];
+  const routingCases = [
+    {
+      path: "tests/fixtures/sample.md",
+      expectedCall: "md:tests/fixtures/sample.md",
+      expectedContent: "markdown",
+    },
+    {
+      path: "tests/fixtures/SAMPLE.MARKDOWN",
+      expectedCall: "md:tests/fixtures/SAMPLE.MARKDOWN",
+      expectedContent: "markdown",
+    },
+    {
+      path: "tests/fixtures/sample.epub",
+      expectedCall: "epub:tests/fixtures/sample.epub",
+      expectedContent: "epub",
+    },
+    {
+      path: "tests/fixtures/SAMPLE.EPUB",
+      expectedCall: "epub:tests/fixtures/SAMPLE.EPUB",
+      expectedContent: "epub",
+    },
+    {
+      path: "tests/fixtures/sample.pdf",
+      expectedCall: "pdf:tests/fixtures/sample.pdf",
+      expectedContent: "pdf",
+    },
+    {
+      path: "tests/fixtures/SAMPLE.PDF",
+      expectedCall: "pdf:tests/fixtures/SAMPLE.PDF",
+      expectedContent: "pdf",
+    },
+    {
+      path: "tests/fixtures/sample.txt",
+      expectedCall: "txt:tests/fixtures/sample.txt",
+      expectedContent: "txt",
+    },
+  ] as const;
 
-    const document = await readFileSource("tests/fixtures/sample.epub", {
-      readEpubFile: async (path: string) => {
-        calls.push(`epub:${path}`);
-        return { content: "epub", source: path, wordCount: 1 };
-      },
-      readPdfFile: async (path: string) => {
-        calls.push(`pdf:${path}`);
-        return { content: "pdf", source: path, wordCount: 1 };
-      },
-      readPlaintextFile: async (path: string) => {
-        calls.push(`txt:${path}`);
-        return { content: "txt", source: path, wordCount: 1 };
-      },
+  for (const entry of routingCases) {
+    it(`routes ${entry.path} correctly`, async () => {
+      const calls: string[] = [];
+
+      const document = await readFileSource(entry.path, {
+        readMarkdownFile: reader("md", "markdown", calls),
+        readEpubFile: reader("epub", "epub", calls),
+        readPdfFile: reader("pdf", "pdf", calls),
+        readPlaintextFile: reader("txt", "txt", calls),
+      });
+
+      expect(calls).toEqual([entry.expectedCall]);
+      expect(document.content).toBe(entry.expectedContent);
     });
+  }
 
-    expect(calls).toEqual(["epub:tests/fixtures/sample.epub"]);
-    expect(document.content).toBe("epub");
-  });
+  const lazyCases = [
+    {
+      label: "markdown",
+      path: "tests/fixtures/sample.md",
+      loaderKey: "loadMarkdownFileReader",
+      expectedContent: "markdown",
+    },
+    {
+      label: "epub",
+      path: "tests/fixtures/sample.epub",
+      loaderKey: "loadEpubFileReader",
+      expectedContent: "epub",
+    },
+    {
+      label: "pdf",
+      path: "tests/fixtures/sample.pdf",
+      loaderKey: "loadPdfFileReader",
+      expectedContent: "pdf",
+    },
+  ] as const;
 
-  it("routes .EPUB files case-insensitively to EPUB ingestor", async () => {
-    const calls: string[] = [];
+  for (const entry of lazyCases) {
+    it(`loads ${entry.label} reader lazily only for matching paths`, async () => {
+      let loaderCalls = 0;
 
-    await readFileSource("tests/fixtures/SAMPLE.EPUB", {
-      readEpubFile: async (path: string) => {
-        calls.push(`epub:${path}`);
-        return { content: "epub", source: path, wordCount: 1 };
-      },
-      readPdfFile: async (path: string) => {
-        calls.push(`pdf:${path}`);
-        return { content: "pdf", source: path, wordCount: 1 };
-      },
-      readPlaintextFile: async (path: string) => {
-        calls.push(`txt:${path}`);
-        return { content: "txt", source: path, wordCount: 1 };
-      },
+      const nonMatching = await readFileSource("tests/fixtures/sample.txt", {
+        [entry.loaderKey]: async () => {
+          loaderCalls += 1;
+          return reader(entry.label.slice(0, 2), entry.expectedContent, []);
+        },
+        readPlaintextFile: async (path: string) => ({
+          content: "txt",
+          source: path,
+          wordCount: 1,
+        }),
+      });
+
+      expect(loaderCalls).toBe(0);
+      expect(nonMatching.content).toBe("txt");
+
+      const matching = await readFileSource(entry.path, {
+        [entry.loaderKey]: async () => {
+          loaderCalls += 1;
+          return async (path: string) => ({
+            content: entry.expectedContent,
+            source: path,
+            wordCount: 1,
+          });
+        },
+        readPlaintextFile: async (path: string) => ({
+          content: "txt",
+          source: path,
+          wordCount: 1,
+        }),
+      });
+
+      expect(loaderCalls).toBe(1);
+      expect(matching.content).toBe(entry.expectedContent);
     });
-
-    expect(calls).toEqual(["epub:tests/fixtures/SAMPLE.EPUB"]);
-  });
-
-  it("routes .pdf files to PDF ingestor", async () => {
-    const calls: string[] = [];
-
-    const document = await readFileSource("tests/fixtures/sample.pdf", {
-      readPdfFile: async (path: string) => {
-        calls.push(`pdf:${path}`);
-        return { content: "pdf", source: path, wordCount: 1 };
-      },
-      readPlaintextFile: async (path: string) => {
-        calls.push(`txt:${path}`);
-        return { content: "txt", source: path, wordCount: 1 };
-      },
-    });
-
-    expect(calls).toEqual(["pdf:tests/fixtures/sample.pdf"]);
-    expect(document.content).toBe("pdf");
-  });
-
-  it("routes .PDF files case-insensitively to PDF ingestor", async () => {
-    const calls: string[] = [];
-
-    await readFileSource("tests/fixtures/SAMPLE.PDF", {
-      readPdfFile: async (path: string) => {
-        calls.push(`pdf:${path}`);
-        return { content: "pdf", source: path, wordCount: 1 };
-      },
-      readPlaintextFile: async (path: string) => {
-        calls.push(`txt:${path}`);
-        return { content: "txt", source: path, wordCount: 1 };
-      },
-    });
-
-    expect(calls).toEqual(["pdf:tests/fixtures/SAMPLE.PDF"]);
-  });
-
-  it("loads PDF reader lazily only for PDF paths", async () => {
-    let loadPdfCalls = 0;
-
-    const document = await readFileSource("tests/fixtures/sample.txt", {
-      loadPdfFileReader: async () => {
-        loadPdfCalls += 1;
-        return async (path: string) => ({ content: "pdf", source: path, wordCount: 1 });
-      },
-      readPlaintextFile: async (path: string) => ({
-        content: "txt",
-        source: path,
-        wordCount: 1,
-      }),
-    });
-
-    expect(loadPdfCalls).toBe(0);
-    expect(document.content).toBe("txt");
-  });
-
-  it("loads EPUB reader lazily only for EPUB paths", async () => {
-    let loadEpubCalls = 0;
-
-    const document = await readFileSource("tests/fixtures/sample.txt", {
-      loadEpubFileReader: async () => {
-        loadEpubCalls += 1;
-        return async (path: string) => ({ content: "epub", source: path, wordCount: 1 });
-      },
-      readPlaintextFile: async (path: string) => ({
-        content: "txt",
-        source: path,
-        wordCount: 1,
-      }),
-    });
-
-    expect(loadEpubCalls).toBe(0);
-    expect(document.content).toBe("txt");
-  });
-
-  it("uses lazy loader for EPUB paths when no direct reader override is provided", async () => {
-    let loadEpubCalls = 0;
-
-    const document = await readFileSource("tests/fixtures/sample.epub", {
-      loadEpubFileReader: async () => {
-        loadEpubCalls += 1;
-        return async (path: string) => ({ content: "epub", source: path, wordCount: 1 });
-      },
-      readPlaintextFile: async (path: string) => ({
-        content: "txt",
-        source: path,
-        wordCount: 1,
-      }),
-    });
-
-    expect(loadEpubCalls).toBe(1);
-    expect(document.content).toBe("epub");
-  });
-
-  it("uses lazy loader for PDF paths when no direct reader override is provided", async () => {
-    let loadPdfCalls = 0;
-
-    const document = await readFileSource("tests/fixtures/sample.pdf", {
-      loadPdfFileReader: async () => {
-        loadPdfCalls += 1;
-        return async (path: string) => ({ content: "pdf", source: path, wordCount: 1 });
-      },
-      readPlaintextFile: async (path: string) => ({
-        content: "txt",
-        source: path,
-        wordCount: 1,
-      }),
-    });
-
-    expect(loadPdfCalls).toBe(1);
-    expect(document.content).toBe("pdf");
-  });
-
-  it("routes non-PDF files to plaintext ingestor", async () => {
-    const calls: string[] = [];
-
-    const document = await readFileSource("tests/fixtures/sample.txt", {
-      readPdfFile: async (path: string) => {
-        calls.push(`pdf:${path}`);
-        return { content: "pdf", source: path, wordCount: 1 };
-      },
-      readPlaintextFile: async (path: string) => {
-        calls.push(`txt:${path}`);
-        return { content: "txt", source: path, wordCount: 1 };
-      },
-    });
-
-    expect(calls).toEqual(["txt:tests/fixtures/sample.txt"]);
-    expect(document.content).toBe("txt");
-  });
+  }
 
   it("keeps file-over-stdin precedence unchanged from source detection", async () => {
     const source = resolveInputSource({
@@ -190,14 +144,8 @@ describe("readFileSource", () => {
 
     const calls: string[] = [];
     await readFileSource(source.path, {
-      readPdfFile: async (path: string) => {
-        calls.push(`pdf:${path}`);
-        return { content: "pdf", source: path, wordCount: 1 };
-      },
-      readPlaintextFile: async (path: string) => {
-        calls.push(`txt:${path}`);
-        return { content: "txt", source: path, wordCount: 1 };
-      },
+      readPdfFile: reader("pdf", "pdf", calls),
+      readPlaintextFile: reader("txt", "txt", calls),
     });
 
     expect(calls).toEqual(["pdf:tests/fixtures/sample.pdf"]);

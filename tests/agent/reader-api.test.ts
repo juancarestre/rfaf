@@ -206,6 +206,25 @@ describe("agent reader api", () => {
     expect(result.wordCount).toBe(4);
   });
 
+  it("supports markdown file ingest through agent API", async () => {
+    const result = await executeAgentIngestFileCommand(
+      {
+        path: "tests/fixtures/sample.md",
+      },
+      async (path: string) => {
+        expect(path).toBe("tests/fixtures/sample.md");
+        return {
+          content: "quick start install dependencies",
+          source: "sample.md",
+          wordCount: 4,
+        };
+      }
+    );
+
+    expect(result.sourceLabel).toBe("sample.md");
+    expect(result.wordCount).toBe(4);
+  });
+
   it("fails closed for invalid mode payload in ingest_file command", async () => {
     let readFileCalls = 0;
 
@@ -324,6 +343,43 @@ describe("agent reader api", () => {
     }
   });
 
+  it("maps known markdown ingest failures to stable agent error codes", async () => {
+    const cases = [
+      {
+        error: new Error("Binary file detected"),
+        code: "MARKDOWN_BINARY",
+      },
+      {
+        error: new Error("Markdown has no readable text"),
+        code: "MARKDOWN_EMPTY_TEXT",
+      },
+      {
+        error: new Error("Markdown parsing timed out"),
+        code: "MARKDOWN_PARSE_FAILED",
+      },
+      {
+        error: new Error("Failed to parse Markdown file"),
+        code: "MARKDOWN_PARSE_FAILED",
+      },
+    ] as const;
+
+    for (const entry of cases) {
+      await expect(
+        executeAgentIngestFileCommand(
+          {
+            path: "tests/fixtures/sample.md",
+          },
+          async () => {
+            throw entry.error;
+          }
+        )
+      ).rejects.toMatchObject({
+        name: "AgentIngestFileError",
+        code: entry.code,
+      });
+    }
+  });
+
   it("normalizes unknown ingest failures to deterministic parse error class", async () => {
     await expect(
       executeAgentIngestFileCommand(
@@ -368,6 +424,21 @@ describe("agent reader api", () => {
       name: "AgentIngestFileError",
       code: "PDF_PARSE_FAILED",
       message: "Failed to parse PDF file",
+    } satisfies Partial<AgentIngestFileError>);
+
+    await expect(
+      executeAgentIngestFileCommand(
+        {
+          path: "tests/fixtures/sample.md",
+        },
+        async () => {
+          throw new Error("unexpected markdown parser panic");
+        }
+      )
+    ).rejects.toMatchObject({
+      name: "AgentIngestFileError",
+      code: "MARKDOWN_PARSE_FAILED",
+      message: "Failed to parse Markdown file",
     } satisfies Partial<AgentIngestFileError>);
   });
 
