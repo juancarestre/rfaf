@@ -20,6 +20,7 @@ import {
   READING_MODES,
   resolveReadingMode,
 } from "./mode-option";
+import { resolveNoBsOption } from "./no-bs-option";
 import { buildReadingPipeline } from "./reading-pipeline";
 import { runSessionLifecycle } from "./session-lifecycle";
 import {
@@ -148,6 +149,18 @@ function normalizeSummaryArgs(rawArgs: string[]): string[] {
   return normalized;
 }
 
+function validateNoBsArgs(rawArgs: string[]): void {
+  for (const token of rawArgs) {
+    if (token.startsWith("--no-bs=")) {
+      throw new UsageError("Invalid --no-bs value. Use --no-bs without a value.");
+    }
+
+    if (token === "--no-no-bs" || token.startsWith("--no-no-bs=")) {
+      throw new UsageError("Invalid --no-bs value. Use --no-bs without a value.");
+    }
+  }
+}
+
 function redactSecrets(
   message: string,
   env: Record<string, string | undefined>
@@ -168,6 +181,7 @@ function redactSecrets(
 
 async function main() {
   const rawArgs = hideBin(process.argv);
+  validateNoBsArgs(rawArgs);
   const normalizedArgs = normalizeSummaryArgs(rawArgs);
   const parser = yargs(normalizedArgs)
     .scriptName("rfaf")
@@ -190,6 +204,11 @@ async function main() {
       type: "string",
       describe: `Summarize before reading (${SUMMARY_PRESETS.join("|")}); bare --summary uses medium`,
     })
+    .option("no-bs", {
+      type: "boolean",
+      default: false,
+      describe: "Clean low-value noise and keep high-signal content",
+    })
     .option("clipboard", {
       type: "boolean",
       default: false,
@@ -205,6 +224,7 @@ async function main() {
     .example("$0 https://example.com/article", "Fetch and speed-read a web article")
     .example("cat article.txt | $0", "Read piped plaintext from stdin")
     .example("$0 --clipboard", "Read copied plain text from clipboard")
+    .example("$0 --no-bs article.txt", "Clean noisy text before reading")
     .example(
       "$0 article.txt --summary=medium --mode=scroll",
       "Summarize then read in scroll mode"
@@ -215,6 +235,9 @@ async function main() {
     .exitProcess(false)
     .help()
     .version()
+    .parserConfiguration({
+      "boolean-negation": false,
+    })
     .strict(false);
 
   const argv = await parser.parse();
@@ -227,6 +250,7 @@ async function main() {
   const wpm = parseWpm(argv.wpm);
   const textScale = resolveTextScale(argv.textScale);
   const mode = resolveReadingMode(argv.mode);
+  const noBsOption = resolveNoBsOption(argv.noBs ?? argv["no-bs"]);
   const summaryOption = resolveSummaryOption(
     argv.summary,
     wasSummaryFlagProvided(normalizedArgs)
@@ -313,6 +337,7 @@ async function main() {
   const readingPipeline = await buildReadingPipeline({
     documentContent: document.content,
     sourceLabel: document.source,
+    noBsOption,
     summaryOption,
     mode,
   });

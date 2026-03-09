@@ -30,7 +30,10 @@ import {
   markPaused,
   type Session,
 } from "../engine/session";
+import { NoBsRuntimeError } from "../cli/errors";
+import { noBsText } from "../llm/no-bs";
 import { summarizeText } from "../llm/summarize";
+import { applyDeterministicNoBs } from "../processor/no-bs-cleaner";
 import { getWordsForMode, type ModeWordCache, transformWordsForMode } from "../processor/mode-transform";
 import {
   computeLineMap,
@@ -114,6 +117,12 @@ export interface AgentReaderState {
 
 interface AgentSummarizeCommand {
   preset: SummaryPreset;
+  sourceLabel: string;
+  readingMode?: ReadingMode;
+  llmConfig: Pick<LLMConfig, "provider" | "model" | "apiKey" | "timeoutMs" | "maxRetries">;
+}
+
+interface AgentNoBsCommand {
   sourceLabel: string;
   readingMode?: ReadingMode;
   llmConfig: Pick<LLMConfig, "provider" | "model" | "apiKey" | "timeoutMs" | "maxRetries">;
@@ -568,6 +577,67 @@ export async function executeAgentSummarizeCommand(
         command.preset,
         readingMode
       ),
+    },
+  };
+}
+
+export async function executeAgentNoBsCommand(
+  runtime: AgentReaderRuntime,
+  command: AgentNoBsCommand,
+  runNoBs: typeof noBsText = noBsText,
+  cleanText: typeof applyDeterministicNoBs = applyDeterministicNoBs
+): Promise<AgentReaderRuntime> {
+  const readingMode =
+    command.readingMode === undefined
+      ? runtime.readingMode
+      : requireReadingMode(command.readingMode, "no-bs command");
+
+  const originalContent = runtime.sourceWords.map((word) => word.text).join(" ");
+  const deterministicCleaned = cleanText(originalContent);
+  if (!deterministicCleaned.trim()) {
+    throw new NoBsRuntimeError("No-BS failed [schema]: no-bs produced empty text.", "schema");
+  }
+
+  let cleanedContent: string;
+  try {
+    cleanedContent = await runNoBs({
+      provider: command.llmConfig.provider,
+      model: command.llmConfig.model,
+      apiKey: command.llmConfig.apiKey,
+      input: deterministicCleaned,
+      timeoutMs: command.llmConfig.timeoutMs,
+      maxRetries: command.llmConfig.maxRetries,
+    });
+  } catch (error: unknown) {
+    if (error instanceof NoBsRuntimeError) {
+      throw error;
+    }
+
+    throw new NoBsRuntimeError("No-BS failed [runtime]: unexpected provider runtime error.", "runtime");
+  }
+
+  const cleanedWords = tokenize(cleanedContent);
+  const { words: transformedWords, modeWordCache } = getWordsForMode(
+    cleanedWords,
+    readingMode,
+    { rsvp: cleanedWords }
+  );
+  const currentWpm = runtime.reader.currentWpm;
+
+  return {
+    reader: createReader(transformedWords, currentWpm),
+    session: createSession(currentWpm),
+    textScale: runtime.textScale,
+    readingMode,
+    sourceWords: cleanedWords,
+    modeWordCache,
+    lineMapCache: null,
+    summary: {
+      enabled: false,
+      preset: DEFAULT_SUMMARY_PRESET,
+      provider: null,
+      model: null,
+      sourceLabel: `${command.sourceLabel} (no-bs)`,
     },
   };
 }

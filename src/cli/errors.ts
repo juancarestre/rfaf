@@ -17,3 +17,16 @@ export class SummarizeRuntimeError extends Error {
     this.stage = stage;
   }
 }
+
+export class NoBsRuntimeError extends Error {
+  readonly stage: "provider" | "schema" | "network" | "timeout" | "runtime";
+
+  constructor(
+    message: string,
+    stage: "provider" | "schema" | "network" | "timeout" | "runtime" = "runtime"
+  ) {
+    super(message);
+    this.name = "NoBsRuntimeError";
+    this.stage = stage;
+  }
+}
