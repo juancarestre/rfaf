@@ -27,6 +27,35 @@ function runCli(args: string[], env?: Record<string, string>) {
   };
 }
 
+function runCliWithPreload(
+  preloadPath: string,
+  args: string[],
+  env?: Record<string, string>
+) {
+  const result = Bun.spawnSync([
+    "bun",
+    "--preload",
+    preloadPath,
+    "src/cli/index.tsx",
+    ...args,
+  ], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      RFAF_NO_ALT_SCREEN: "1",
+      ...env,
+    },
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+
+  return {
+    exitCode: result.exitCode,
+    stdout: Buffer.from(result.stdout).toString("utf8"),
+    stderr: Buffer.from(result.stderr).toString("utf8"),
+  };
+}
+
 describe("summary CLI contract", () => {
   it("returns usage error for unsupported summary presets", () => {
     const result = runCli(["--summary=huge", "tests/fixtures/sample.txt"]);
@@ -85,5 +114,37 @@ describe("summary CLI contract", () => {
     expect(result.stderr).not.toContain("Summarizing:");
     expect(result.stderr).toContain("[error] summarization failed");
     expect(result.stderr).toContain("Summarization failed [timeout]");
+  });
+
+  it("surfaces deterministic language-preservation failure for translated summary output", () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "rfaf-summary-language-contract-"));
+    const rfafDir = join(homeDir, ".rfaf");
+    mkdirSync(rfafDir, { recursive: true });
+    writeFileSync(
+      join(rfafDir, "config.toml"),
+      [
+        "[llm]",
+        'provider = "openai"',
+        'model = "gpt-4o-mini"',
+        "",
+        "[summary]",
+        "timeout_ms = 5000",
+        "max_retries = 0",
+      ].join("\n")
+    );
+
+    const result = runCliWithPreload(
+      "./tests/fixtures/preload-summary-mock.ts",
+      ["--summary=medium", "tests/fixtures/sample-es.txt"],
+      {
+        HOME: homeDir,
+        OPENAI_API_KEY: "dummy",
+        RFAF_SUMMARY_MOCK_SCENARIO: "language-mismatch",
+      }
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("[error] summarization failed");
+    expect(result.stderr).toContain("language preservation check failed");
   });
 });

@@ -1,0 +1,2 @@
+Esta es una historia que habla sobre los sistemas y las pruebas para equipos de software.
+La lectura en espanol debe mantenerse en su idioma original y nunca traducirse al ingles por defecto.

@@ -10,6 +10,7 @@ import {
   executeAgentSummarizeCommand,
   getAgentReaderState,
 } from "../../src/agent/reader-api";
+import { SummarizeRuntimeError } from "../../src/cli/errors";
 import type { Word } from "../../src/processor/types";
 
 function words(): Word[] {
@@ -130,6 +131,37 @@ describe("agent reader api", () => {
     expect(state.summarySourceLabel).toBe("stdin (summary:short)");
     expect(state.readingMode).toBe("rsvp");
     expect(state.totalWords).toBeGreaterThan(3);
+  });
+
+  it("surfaces deterministic language-preservation summarize failure for agent parity", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    await expect(
+      executeAgentSummarizeCommand(
+        runtime,
+        {
+          preset: "short",
+          sourceLabel: "stdin",
+          llmConfig: {
+            provider: "openai",
+            model: "gpt-5-mini",
+            apiKey: "test",
+            timeoutMs: 1_000,
+            maxRetries: 0,
+          },
+        },
+        async () => {
+          throw new SummarizeRuntimeError(
+            "Summarization failed [schema]: language preservation check failed; summary language differs from source text.",
+            "schema"
+          );
+        }
+      )
+    ).rejects.toMatchObject({
+      name: "SummarizeRuntimeError",
+      stage: "schema",
+      message: "Summarization failed [schema]: language preservation check failed; summary language differs from source text.",
+    });
   });
 
   it("supports URL ingest through agent API with runtime defaults/overrides", async () => {

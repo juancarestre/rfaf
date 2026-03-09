@@ -10,6 +10,75 @@ import { assertInputWithinLimit } from "../ingest/constants";
 
 export const MAX_SUMMARY_BYTES = 512 * 1024;
 
+const LANGUAGE_PRESERVATION_FAILURE_REASON = "language preservation check failed";
+
+const ENGLISH_MARKER_WORDS = new Set([
+  "a",
+  "an",
+  "is",
+  "of",
+  "to",
+  "in",
+  "the",
+  "and",
+  "that",
+  "with",
+  "this",
+  "from",
+  "into",
+  "for",
+  "are",
+  "was",
+  "were",
+  "have",
+  "has",
+  "had",
+  "not",
+  "but",
+  "you",
+  "your",
+  "about",
+  "while",
+]);
+
+const NON_ENGLISH_LATIN_MARKER_WORDS = new Set([
+  // Spanish
+  "que",
+  "los",
+  "las",
+  "para",
+  "como",
+  "esta",
+  "este",
+  "una",
+  // French
+  "avec",
+  "dans",
+  "pour",
+  "plus",
+  "sans",
+  "leurs",
+  "ainsi",
+  // Portuguese
+  "uma",
+  "com",
+  "não",
+  "mais",
+  "como",
+  "sobre",
+  // Italian
+  "della",
+  "delle",
+  "degli",
+  "dopo",
+]);
+
+const NON_LATIN_SCRIPT_REGEX =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Cyrillic}\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Devanagari}\p{Script=Thai}\p{Script=Greek}]/u;
+
+const LATIN_WORD_REGEX = /\p{Script=Latin}+/gu;
+const LATIN_DIACRITIC_REGEX = /[\u00C0-\u024F]/u;
+
 export const SummaryResponseSchema = z.object({
   summary: z.string().trim().min(1).max(50_000),
 });
@@ -44,6 +113,8 @@ export function buildSummaryPrompt(input: string, preset: SummaryPreset): string
     "You summarize text for speed reading.",
     `Preset: ${preset}`,
     "Return a single coherent summary preserving key meaning and chronology.",
+    "Return the summary in the same language as the input text.",
+    "Do not translate unless explicitly requested by the user (for example via --translate-to).",
     "Avoid bullet points, markdown, and headings.",
     targetGuidance,
     "Text to summarize:",
@@ -53,6 +124,68 @@ export function buildSummaryPrompt(input: string, preset: SummaryPreset): string
 
 export function normalizeSummaryText(value: string): string {
   return value.trim();
+}
+
+function latinWords(text: string): string[] {
+  return text.toLowerCase().match(LATIN_WORD_REGEX) ?? [];
+}
+
+function countMarkerHits(words: string[], markers: Set<string>): number {
+  let hits = 0;
+  for (const word of words) {
+    if (markers.has(word)) {
+      hits += 1;
+    }
+  }
+  return hits;
+}
+
+function isHighConfidenceEnglish(text: string): boolean {
+  const words = latinWords(text);
+  if (words.length < 6) {
+    return false;
+  }
+
+  const englishHits = countMarkerHits(words, ENGLISH_MARKER_WORDS);
+  return englishHits >= 3 && englishHits / words.length >= 0.2;
+}
+
+function isHighConfidenceNonEnglishLatin(text: string): boolean {
+  const words = latinWords(text);
+  if (words.length < 6) {
+    return false;
+  }
+
+  const englishHits = countMarkerHits(words, ENGLISH_MARKER_WORDS);
+  const nonEnglishHits = countMarkerHits(words, NON_ENGLISH_LATIN_MARKER_WORDS);
+
+  if (nonEnglishHits >= 3 && nonEnglishHits > englishHits) {
+    return true;
+  }
+
+  return LATIN_DIACRITIC_REGEX.test(text) && englishHits === 0;
+}
+
+function isHighConfidenceNonLatin(text: string): boolean {
+  return NON_LATIN_SCRIPT_REGEX.test(text);
+}
+
+function violatesLanguagePreservation(source: string, summary: string): boolean {
+  if (!source.trim() || !summary.trim()) {
+    return false;
+  }
+
+  const summaryLooksEnglish = isHighConfidenceEnglish(summary);
+  if (!summaryLooksEnglish) {
+    return false;
+  }
+
+  return isHighConfidenceNonLatin(source) || isHighConfidenceNonEnglishLatin(source);
+}
+
+function isLanguagePreservationFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.toLowerCase().includes(LANGUAGE_PRESERVATION_FAILURE_REASON);
 }
 
 function createModel(provider: LLMProvider, modelName: string, apiKey: string): LanguageModel {
@@ -125,6 +258,13 @@ function isTransientRuntimeError(error: unknown): boolean {
 function classifyRuntimeError(error: unknown): SummarizeRuntimeError {
   const message = error instanceof Error ? error.message : String(error);
   const lower = message.toLowerCase();
+
+  if (lower.includes(LANGUAGE_PRESERVATION_FAILURE_REASON)) {
+    return new SummarizeRuntimeError(
+      "Summarization failed [schema]: language preservation check failed; summary language differs from source text.",
+      "schema"
+    );
+  }
 
   if (lower.includes("abort") || lower.includes("sigint") || lower.includes("cancel")) {
     return new SummarizeRuntimeError(
@@ -206,12 +346,22 @@ export async function summarizeTextWithGenerator(
         );
       }
 
+      if (violatesLanguagePreservation(input.input, normalized)) {
+        throw new SummarizeRuntimeError(
+          "Summarization failed [schema]: language preservation check failed; summary language differs from source text.",
+          "schema"
+        );
+      }
+
       assertInputWithinLimit(Buffer.byteLength(normalized, "utf8"), MAX_SUMMARY_BYTES);
 
       return normalized;
     } catch (error: unknown) {
       lastError = error;
-      if (attempt >= input.maxRetries || !isTransientRuntimeError(error)) {
+      if (
+        attempt >= input.maxRetries ||
+        (!isTransientRuntimeError(error) && !isLanguagePreservationFailure(error))
+      ) {
         break;
       }
 
