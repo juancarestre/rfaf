@@ -112,6 +112,14 @@ describe("agent reader api", () => {
     expect(state.textScale).toBe("small");
   });
 
+  it("rejects unsupported quiz command to keep CLI-only parity explicit", () => {
+    const runtime = createAgentReaderRuntime(words(), 300);
+
+    expect(() =>
+      executeAgentCommand(runtime, { type: "quiz" } as unknown as Parameters<typeof executeAgentCommand>[1])
+    ).toThrow("Unsupported command");
+  });
+
   it("supports summarize-then-read through agent API", async () => {
     const runtime = createAgentReaderRuntime(words(), 320);
 

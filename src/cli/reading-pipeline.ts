@@ -17,6 +17,14 @@ interface ReadingPipelineInput {
   mode: ReadingMode;
 }
 
+interface TransformedContentPipelineInput {
+  documentContent: string;
+  sourceLabel: string;
+  noBsOption?: NoBsOption;
+  summaryOption: SummaryOption;
+  translateOption?: TranslateOption;
+}
+
 interface ReadingPipelineDeps {
   noBsBefore?: (input: {
     documentContent: string;
@@ -42,16 +50,18 @@ interface ReadingPipelineResult {
   words: Word[];
   sourceWords: Word[];
   sourceLabel: string;
+  readingContent: string;
 }
 
-export async function buildReadingPipeline(
-  input: ReadingPipelineInput,
-  deps: ReadingPipelineDeps = {}
-): Promise<ReadingPipelineResult> {
-  const tokenizeFn = deps.tokenizeFn ?? tokenize;
-  const chunkFn = deps.chunkFn ?? chunkWords;
-  const bionicFn = deps.bionicFn ?? applyBionicMode;
+interface TransformedContentResult {
+  readingContent: string;
+  sourceLabel: string;
+}
 
+async function applyPreReadTransforms(
+  input: TransformedContentPipelineInput,
+  deps: ReadingPipelineDeps
+): Promise<TransformedContentResult> {
   const noBsResult = input.noBsOption?.enabled
     ? await (async () => {
         const noBsBefore =
@@ -100,7 +110,7 @@ export async function buildReadingPipeline(
         sourceLabel: noBsResult.sourceLabel,
       };
 
-  const translateResult = input.translateOption?.enabled
+  return input.translateOption?.enabled
     ? await (async () => {
         const translate =
           deps.translateBefore ??
@@ -123,8 +133,26 @@ export async function buildReadingPipeline(
         readingContent: summaryResult.readingContent,
         sourceLabel: summaryResult.sourceLabel,
       };
+}
 
-  const tokenized = tokenizeFn(translateResult.readingContent);
+export async function buildTransformedContentPipeline(
+  input: TransformedContentPipelineInput,
+  deps: ReadingPipelineDeps = {}
+): Promise<TransformedContentResult> {
+  return applyPreReadTransforms(input, deps);
+}
+
+export async function buildReadingPipeline(
+  input: ReadingPipelineInput,
+  deps: ReadingPipelineDeps = {}
+): Promise<ReadingPipelineResult> {
+  const tokenizeFn = deps.tokenizeFn ?? tokenize;
+  const chunkFn = deps.chunkFn ?? chunkWords;
+  const bionicFn = deps.bionicFn ?? applyBionicMode;
+
+  const transformed = await applyPreReadTransforms(input, deps);
+
+  const tokenized = tokenizeFn(transformed.readingContent);
   const words =
     deps.chunkFn || deps.bionicFn
       ? input.mode === "chunked"
@@ -137,6 +165,7 @@ export async function buildReadingPipeline(
   return {
     words,
     sourceWords: tokenized,
-    sourceLabel: translateResult.sourceLabel,
+    sourceLabel: transformed.sourceLabel,
+    readingContent: transformed.readingContent,
   };
 }

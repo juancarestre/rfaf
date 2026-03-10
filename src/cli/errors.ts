@@ -43,3 +43,16 @@ export class TranslateRuntimeError extends Error {
     this.stage = stage;
   }
 }
+
+export class QuizRuntimeError extends Error {
+  readonly stage: "provider" | "schema" | "network" | "timeout" | "runtime";
+
+  constructor(
+    message: string,
+    stage: "provider" | "schema" | "network" | "timeout" | "runtime" = "runtime"
+  ) {
+    super(message);
+    this.name = "QuizRuntimeError";
+    this.stage = stage;
+  }
+}
