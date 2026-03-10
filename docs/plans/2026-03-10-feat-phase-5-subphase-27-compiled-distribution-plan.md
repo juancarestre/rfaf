@@ -1,7 +1,7 @@
 ---
 title: "feat: Phase 5 Subphase 27 Compiled Distribution"
 type: feat
-status: active
+status: completed
 date: 2026-03-10
 origin: docs/brainstorms/2026-03-04-rfaf-mvp-scope-brainstorm.md
 ---
@@ -182,13 +182,13 @@ Include:
 
 ## Acceptance Criteria
 
-- [ ] Compiled artifacts are produced for the defined target matrix with deterministic naming.
-- [ ] `rfaf --help` behavior is contract-equivalent between source-run and compiled binary.
-- [ ] Compiled binary preserves deterministic file-vs-stdin resolution and exit-code contracts.
-- [ ] Interactive compiled runtime restores terminal state correctly on normal exit and interruption.
-- [ ] Release artifacts include checksums and manifest, and verification failures block release.
-- [ ] Distribution usage is documented for end users and maintainers.
-- [ ] Existing feature behavior is unchanged beyond distribution surface (scope guard).
+- [x] Compiled artifacts are produced for the defined target matrix with deterministic naming.
+- [x] `rfaf --help` behavior is contract-equivalent between source-run and compiled binary.
+- [x] Compiled binary preserves deterministic file-vs-stdin resolution and exit-code contracts.
+- [x] Interactive compiled runtime restores terminal state correctly on normal exit and interruption.
+- [x] Release artifacts include checksums and manifest, and verification failures block release.
+- [x] Distribution usage is documented for end users and maintainers.
+- [x] Existing feature behavior is unchanged beyond distribution surface (scope guard).
 
 ## Success Metrics
 

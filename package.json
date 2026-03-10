@@ -9,6 +9,9 @@
   },
   "scripts": {
     "start": "bun run src/cli/index.tsx",
+    "build:compile": "bun run scripts/build/compile-rfaf.ts",
+    "build:compile:current": "bun run scripts/build/compile-rfaf.ts --current",
+    "release:checksums": "bun run scripts/release/generate-checksums.ts",
     "spike:ink": "bun run scripts/ink-spike.tsx",
     "test": "bun test",
     "test:watch": "bun test --watch"
@@ -31,6 +34,7 @@
     "@types/react": "^19.0.0",
     "@types/yargs": "^17.0.0",
     "bun-types": "^1.3.10",
+    "react-devtools-core": "^7.0.1",
     "typescript": "^5.0.0"
   }
 }
