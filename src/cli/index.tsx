@@ -6,6 +6,7 @@ import { ReadStream } from "node:tty";
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { createLoadingIndicator } from "./loading-indicator";
+import { renderHistoryCommand } from "./history-command";
 import { readFileSource } from "../ingest/file-dispatcher";
 import { isStdinPiped, resolveInputSource } from "../ingest/detect";
 import { readStdin } from "../ingest/stdin";
@@ -49,6 +50,7 @@ import {
   resolveTextScale,
   TEXT_SCALE_PRESETS,
 } from "./text-scale-option";
+import { defaultHistoryPath } from "../history/history-store";
 import {
   resolveTranslateOption,
   wasTranslateFlagProvided,
@@ -296,6 +298,12 @@ function redactSecrets(
 
 async function main() {
   const rawArgs = hideBin(process.argv);
+
+  if (rawArgs.length === 1 && rawArgs[0] === "history") {
+    process.stdout.write(renderHistoryCommand(defaultHistoryPath(process.env)));
+    return;
+  }
+
   validateNoBsArgs(rawArgs);
   validateQuizArgs(rawArgs);
   validateStrategyArgs(rawArgs);
@@ -361,6 +369,7 @@ async function main() {
     .example("$0 https://example.com/article", "Fetch and speed-read a web article")
     .example("cat article.txt | $0", "Read piped plaintext from stdin")
     .example("$0 --clipboard", "Read copied plain text from clipboard")
+    .example("$0 history", "Show completed session history")
     .example("$0 --no-bs article.txt", "Clean noisy text before reading")
     .example(
       "$0 article.txt --summary=medium --mode=scroll",
@@ -554,6 +563,7 @@ async function main() {
 
   const sourceWords = readingPipeline.sourceWords;
   const sourceLabel = readingPipeline.sourceLabel;
+  const historyPath = defaultHistoryPath(process.env);
 
   await runSessionLifecycle({
     useAlternateScreen: useAlternateScreen(),
@@ -568,6 +578,7 @@ async function main() {
           sourceLabel={sourceLabel}
           textScale={textScale}
           initialMode={effectiveMode}
+          historyPath={historyPath}
           keyPhrasePreview={readingPipeline.keyPhrases}
         />,
         {

@@ -1,9 +1,9 @@
 import { useApp } from "ink";
 import { useInput } from "ink";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createReader, restartReader, type Reader } from "../engine/reader";
 import { applyReaderAndSession } from "../engine/reader-session-sync";
-import { createSession, type Session } from "../engine/session";
+import { createSession } from "../engine/session";
 import type { Word } from "../processor/types";
 import type { ReadingMode } from "../cli/mode-option";
 import { RSVPScreen } from "./screens/RSVPScreen";
@@ -14,6 +14,7 @@ import {
   createAppRuntimeState,
   type AppRuntimeState,
 } from "./runtime-mode-state";
+import { persistCompletedSessionTransition } from "../history/history-runtime";
 
 interface AppProps {
   sourceWords: Word[];
@@ -21,6 +22,7 @@ interface AppProps {
   sourceLabel: string;
   textScale: TextScalePreset;
   initialMode: ReadingMode;
+  historyPath?: string;
   keyPhrasePreview?: string[];
 }
 
@@ -30,25 +32,28 @@ export function App({
   sourceLabel,
   textScale,
   initialMode,
+  historyPath,
   keyPhrasePreview = [],
 }: AppProps) {
   const { exit } = useApp();
   const [runtime, setRuntime] = useState<AppRuntimeState>(() =>
     createAppRuntimeState(sourceWords, initialMode, initialWpm)
   );
+  const previousRuntimeRef = useRef<AppRuntimeState | null>(null);
 
   const updateReader = (transform: (reader: Reader) => Reader) => {
     setRuntime((currentRuntime) => {
       const nextReader = transform(currentRuntime.reader);
+      const nextSession = applyReaderAndSession(
+        currentRuntime.reader,
+        currentRuntime.session,
+        nextReader
+      );
 
       return {
         ...currentRuntime,
         reader: nextReader,
-        session: applyReaderAndSession(
-          currentRuntime.reader,
-          currentRuntime.session,
-          nextReader
-        ),
+        session: nextSession,
       };
     });
   };
@@ -75,6 +80,23 @@ export function App({
   useInput((input) => {
     setRuntime((currentRuntime) => applyAppModeInput(currentRuntime, sourceWords, input));
   });
+
+  useEffect(() => {
+    const previousRuntime = previousRuntimeRef.current;
+
+    if (historyPath && previousRuntime) {
+      persistCompletedSessionTransition({
+        historyPath,
+        currentReader: previousRuntime.reader,
+        nextReader: runtime.reader,
+        nextSession: runtime.session,
+        mode: runtime.activeMode,
+        sourceLabel,
+      });
+    }
+
+    previousRuntimeRef.current = runtime;
+  }, [historyPath, runtime, sourceLabel]);
 
   if (runtime.activeMode === "scroll") {
     return (
