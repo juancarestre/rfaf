@@ -73,13 +73,20 @@ We chose (1) because the reading engine IS the product. If RSVP doesn't feel gre
 27. `bun build --compile` for distribution
 
 ### Phase 6: Behavior Corrections + Final Polish
-28. Make `--summarize` output length proportional to source length (short text should stay short, long text should not collapse to a fixed ~1-minute read)
+28. Make `--summarize` output length proportional to source length (short text should stay short, long text should not collapse to a fixed ~1-minute read) realistically, not in a fixed time frame
 29. Ensure `--no-bs` works for big inputs like PDFs
       🐍 > $ bun run src/cli/index.tsx tests/fixtures/AldousHuxley-Laspuertasdelapercepción.pdf --no-bs
    [error] no-bs failed
    No-BS failed [schema]: content preservation check failed; cleaned text appears summarized or truncated. (provider=google, model=gemini-3.1-flash-lite-preview)
-30. Fix chunked-mode ORP highlighting so the painted character is never whitespace (fallback to nearest visible character)
 
+### Phase 7: Help Overlay
+
+30. Fix chunked-mode ORP highlighting so the painted character is never whitespace (MAYBE fallback to nearest visible character)
+31. --help should divide the help text into sections with clear headers, especially for the flags that require ai processing
+
+### Phase 8: Distribution
+32. Add a keyboard shortcut within the program to toggle the help overlay, help should show all the keybindings in a very explanatory way, including the runtime controls
+33. Create a github actions workflow to build the project and run the tests, merges to main should trigger the build and run the tests, and if they pass, a new release should be created with the new version number, that includes the compiled binaries for the different platforms, lets start with the version 1.0.0
 
 ## Open Questions
 
