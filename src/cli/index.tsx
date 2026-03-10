@@ -26,7 +26,12 @@ import {
   resolveReadingMode,
 } from "./mode-option";
 import { resolveNoBsOption } from "./no-bs-option";
-import { buildReadingPipeline } from "./reading-pipeline";
+import { resolveQuizOption } from "./quiz-option";
+import { runStandaloneQuiz } from "./quiz-flow";
+import {
+  buildReadingPipeline,
+  buildTransformedContentPipeline,
+} from "./reading-pipeline";
 import { runSessionLifecycle } from "./session-lifecycle";
 import {
   resolveSummaryOption,
@@ -253,6 +258,18 @@ function validateNoBsArgs(rawArgs: string[]): void {
   }
 }
 
+function validateQuizArgs(rawArgs: string[]): void {
+  for (const token of rawArgs) {
+    if (token.startsWith("--quiz=")) {
+      throw new UsageError("Invalid --quiz value. Use --quiz without a value.");
+    }
+
+    if (token === "--no-quiz" || token.startsWith("--no-quiz=")) {
+      throw new UsageError("Invalid --quiz value. Use --quiz without a value.");
+    }
+  }
+}
+
 function redactSecrets(
   message: string,
   env: Record<string, string | undefined>
@@ -274,6 +291,7 @@ function redactSecrets(
 async function main() {
   const rawArgs = hideBin(process.argv);
   validateNoBsArgs(rawArgs);
+  validateQuizArgs(rawArgs);
   const normalizedArgs = normalizeKeyPhrasesArgs(
     normalizeTranslateArgs(normalizeSummaryArgs(rawArgs))
   );
@@ -310,6 +328,11 @@ async function main() {
     .option("key-phrases", {
       type: "string",
       describe: `Extract key phrases before reading (${KEY_PHRASES_OUTPUT_MODES.join("|")}); bare --key-phrases uses preview`,
+    })
+    .option("quiz", {
+      type: "boolean",
+      default: false,
+      describe: "Run a standalone retention quiz after text transforms",
     })
     .option("clipboard", {
       type: "boolean",
@@ -353,6 +376,7 @@ async function main() {
   const textScale = resolveTextScale(argv.textScale);
   const mode = resolveReadingMode(argv.mode);
   const noBsOption = resolveNoBsOption(argv.noBs ?? argv["no-bs"]);
+  const quizOption = resolveQuizOption(argv.quiz);
   const summaryOption = resolveSummaryOption(
     argv.summary,
     wasSummaryFlagProvided(normalizedArgs)
@@ -368,6 +392,10 @@ async function main() {
 
   if (argv.help || argv.version) {
     return;
+  }
+
+  if (quizOption.enabled && !process.stdout.isTTY) {
+    throw new UsageError("Interactive terminal output is required for --quiz.");
   }
 
   const stdinIsPiped = isStdinPiped();
@@ -442,6 +470,36 @@ async function main() {
 
   if (pendingWarning) {
     process.stderr.write(`${pendingWarning}\n`);
+  }
+
+  if (quizOption.enabled) {
+    const transformed = await buildTransformedContentPipeline({
+      documentContent: document.content,
+      sourceLabel: document.source,
+      noBsOption,
+      summaryOption,
+      translateOption,
+    });
+
+    const { stdin: quizStdin, cleanup } = getInteractiveInputStream();
+
+    try {
+      if (!quizStdin) {
+        throw new UsageError("Interactive terminal input is required for --quiz.");
+      }
+
+      await runStandaloneQuiz({
+        documentContent: transformed.readingContent,
+        sourceLabel: transformed.sourceLabel,
+        quizOption,
+        inputStream: quizStdin,
+        outputStream: process.stdout,
+      });
+    } finally {
+      cleanup();
+    }
+
+    return;
   }
 
   const readingPipeline = await buildReadingPipeline({

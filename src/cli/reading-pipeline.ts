@@ -20,6 +20,14 @@ interface ReadingPipelineInput {
   mode: ReadingMode;
 }
 
+interface TransformedContentPipelineInput {
+  documentContent: string;
+  sourceLabel: string;
+  noBsOption?: NoBsOption;
+  summaryOption: SummaryOption;
+  translateOption?: TranslateOption;
+}
+
 interface ReadingPipelineDeps {
   noBsBefore?: (input: {
     documentContent: string;
@@ -53,14 +61,19 @@ interface ReadingPipelineResult {
   keyPhrases: string[];
 }
 
-export async function buildReadingPipeline(
-  input: ReadingPipelineInput,
-  deps: ReadingPipelineDeps = {}
-): Promise<ReadingPipelineResult> {
-  const tokenizeFn = deps.tokenizeFn ?? tokenize;
-  const chunkFn = deps.chunkFn ?? chunkWords;
-  const bionicFn = deps.bionicFn ?? applyBionicMode;
+interface TransformedContentResult {
+  readingContent: string;
+  sourceLabel: string;
+}
 
+interface KeyPhrasesResult extends TransformedContentResult {
+  keyPhrases: string[];
+}
+
+async function applyPreReadTransforms(
+  input: TransformedContentPipelineInput,
+  deps: ReadingPipelineDeps
+): Promise<TransformedContentResult> {
   const noBsResult = input.noBsOption?.enabled
     ? await (async () => {
         const noBsBefore =
@@ -109,7 +122,7 @@ export async function buildReadingPipeline(
         sourceLabel: noBsResult.sourceLabel,
       };
 
-  const translateResult = input.translateOption?.enabled
+  return input.translateOption?.enabled
     ? await (async () => {
         const translate =
           deps.translateBefore ??
@@ -132,40 +145,66 @@ export async function buildReadingPipeline(
         readingContent: summaryResult.readingContent,
         sourceLabel: summaryResult.sourceLabel,
       };
+}
 
-  const keyPhrasesResult = input.keyPhrasesOption?.enabled
-    ? await (async () => {
-        const keyPhrasesBefore =
-          deps.keyPhrasesBefore ??
-          (async (keyPhrasesInput: {
-            documentContent: string;
-            sourceLabel: string;
-            keyPhrasesOption: KeyPhrasesOption;
-          }) => {
-            const { keyPhrasesBeforeRsvp } = await import("./key-phrases-flow");
-            return keyPhrasesBeforeRsvp(keyPhrasesInput);
-          });
+async function applyKeyPhrasesTransform(
+  transformed: TransformedContentResult,
+  keyPhrasesOption: KeyPhrasesOption | undefined,
+  deps: ReadingPipelineDeps
+): Promise<KeyPhrasesResult> {
+  if (!keyPhrasesOption?.enabled) {
+    return {
+      readingContent: transformed.readingContent,
+      sourceLabel: transformed.sourceLabel,
+      keyPhrases: [],
+    };
+  }
 
-        return keyPhrasesBefore({
-          documentContent: translateResult.readingContent,
-          sourceLabel: translateResult.sourceLabel,
-          keyPhrasesOption: input.keyPhrasesOption ?? {
-            enabled: false,
-            mode: null,
-            maxPhrases: null,
-          },
-        });
-      })()
-    : {
-        readingContent: translateResult.readingContent,
-        sourceLabel: translateResult.sourceLabel,
-        keyPhrases: [],
-      };
+  const keyPhrasesBefore =
+    deps.keyPhrasesBefore ??
+    (async (keyPhrasesInput: {
+      documentContent: string;
+      sourceLabel: string;
+      keyPhrasesOption: KeyPhrasesOption;
+    }) => {
+      const { keyPhrasesBeforeRsvp } = await import("./key-phrases-flow");
+      return keyPhrasesBeforeRsvp(keyPhrasesInput);
+    });
+
+  return keyPhrasesBefore({
+    documentContent: transformed.readingContent,
+    sourceLabel: transformed.sourceLabel,
+    keyPhrasesOption,
+  });
+}
+
+export async function buildTransformedContentPipeline(
+  input: TransformedContentPipelineInput,
+  deps: ReadingPipelineDeps = {}
+): Promise<TransformedContentResult> {
+  return applyPreReadTransforms(input, deps);
+}
+
+export async function buildReadingPipeline(
+  input: ReadingPipelineInput,
+  deps: ReadingPipelineDeps = {}
+): Promise<ReadingPipelineResult> {
+  const tokenizeFn = deps.tokenizeFn ?? tokenize;
+  const chunkFn = deps.chunkFn ?? chunkWords;
+  const bionicFn = deps.bionicFn ?? applyBionicMode;
+
+  const transformed = await applyPreReadTransforms(input, deps);
+  const keyPhrasesResult = await applyKeyPhrasesTransform(
+    transformed,
+    input.keyPhrasesOption,
+    deps
+  );
 
   const tokenized = annotateWordsWithKeyPhrases(
     tokenizeFn(keyPhrasesResult.readingContent),
     keyPhrasesResult.keyPhrases
   );
+
   const words =
     deps.chunkFn || deps.bionicFn
       ? input.mode === "chunked"
