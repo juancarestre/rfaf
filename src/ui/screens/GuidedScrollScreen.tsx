@@ -38,6 +38,7 @@ interface GuidedScrollScreenProps {
   sourceLabel: string;
   textScale: TextScalePreset;
   mode: ReadingMode;
+  keyPhrasePreview?: string[];
   reader?: Reader;
   session?: Session;
   updateReader?: (transform: (reader: Reader) => Reader) => void;
@@ -123,6 +124,7 @@ export function GuidedScrollScreen({
   sourceLabel,
   textScale,
   mode,
+  keyPhrasePreview = [],
   reader,
   session,
   updateReader,
@@ -167,7 +169,11 @@ export function GuidedScrollScreen({
   const textPaddingX = 1;
   const contentWidth = Math.max(1, width - textPaddingX * 2);
   const sanitizedWords = useMemo(
-    () => words.map((word) => sanitizeTerminalText(word.text)),
+    () =>
+      words.map((word) => {
+        const safe = sanitizeTerminalText(word.text);
+        return word.keyPhraseMatch ? safe.toUpperCase() : safe;
+      }),
     [words]
   );
 
@@ -324,22 +330,30 @@ export function GuidedScrollScreen({
   }
   const visibleEnd = Math.min(lineMap.totalLines - 1, visibleStart + availableLines - 1);
 
-  const lineElements = useMemo(() => {
-    const nextLineElements: { text: string; isCurrentLine: boolean }[] = [];
+  const visibleLineTexts = useMemo(() => {
+    const lines: string[] = [];
 
     for (let line = visibleStart; line <= visibleEnd; line++) {
-      nextLineElements.push({
-        text: buildLineText(
+      lines.push(
+        buildLineText(
           sanitizedWords,
           getFirstWordIndexForLine(lineMap, line),
           getLastWordIndexForLine(lineMap, line)
-        ),
-        isCurrentLine: line === currentLine,
-      });
+        )
+      );
     }
 
-    return nextLineElements;
-  }, [currentLine, lineMap, sanitizedWords, visibleEnd, visibleStart]);
+    return lines;
+  }, [lineMap, sanitizedWords, visibleEnd, visibleStart]);
+
+  const lineElements = useMemo(
+    () =>
+      visibleLineTexts.map((text, index) => ({
+        text,
+        isCurrentLine: visibleStart + index === currentLine,
+      })),
+    [currentLine, visibleLineTexts, visibleStart]
+  );
 
   const progress = useMemo(() => {
     if (words.length <= 1) return 1;
@@ -378,6 +392,17 @@ export function GuidedScrollScreen({
     return "Idle";
   }, [activeReader.currentIndex, activeReader.state, activeSession]);
 
+  const showKeyPhrasePreview =
+    keyPhrasePreview.length > 0 &&
+    activeReader.state === "paused" &&
+    activeReader.currentIndex === 0 &&
+    activeSession.startTimeMs === null &&
+    !activeHelpVisible;
+  const safeKeyPhrasePreview = useMemo(
+    () => keyPhrasePreview.map((phrase) => sanitizeTerminalText(phrase)),
+    [keyPhrasePreview]
+  );
+
   return (
     <Box flexDirection="column" width={width} height={height} alignItems="flex-start">
       {tooSmall ? (
@@ -400,6 +425,14 @@ export function GuidedScrollScreen({
               />
             ) : (
               <Box flexDirection="column" paddingX={1}>
+                {showKeyPhrasePreview ? (
+                  <Box flexDirection="column" marginBottom={1}>
+                    <Text bold>Key phrases:</Text>
+                    {safeKeyPhrasePreview.map((phrase, index) => (
+                      <Text key={`${index}-${phrase}`}>{`- ${phrase}`}</Text>
+                    ))}
+                  </Box>
+                ) : null}
                 {lineElements.map((lineEl, idx) => (
                   <Text
                     key={`${visibleStart + idx}`}

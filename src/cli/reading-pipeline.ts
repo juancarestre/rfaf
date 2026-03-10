@@ -1,8 +1,10 @@
 import { applyBionicMode } from "../processor/bionic";
 import { chunkWords } from "../processor/chunker";
+import { annotateWordsWithKeyPhrases } from "../processor/key-phrase-annotation";
 import { transformWordsForMode } from "../processor/mode-transform";
 import { tokenize } from "../processor/tokenizer";
 import type { Word } from "../processor/types";
+import type { KeyPhrasesOption } from "./key-phrases-option";
 import type { ReadingMode } from "./mode-option";
 import type { NoBsOption } from "./no-bs-option";
 import type { SummaryOption } from "./summary-option";
@@ -14,6 +16,7 @@ interface ReadingPipelineInput {
   noBsOption?: NoBsOption;
   summaryOption: SummaryOption;
   translateOption?: TranslateOption;
+  keyPhrasesOption?: KeyPhrasesOption;
   mode: ReadingMode;
 }
 
@@ -33,6 +36,11 @@ interface ReadingPipelineDeps {
     sourceLabel: string;
     translateOption: TranslateOption;
   }) => Promise<{ readingContent: string; sourceLabel: string }>;
+  keyPhrasesBefore?: (input: {
+    documentContent: string;
+    sourceLabel: string;
+    keyPhrasesOption: KeyPhrasesOption;
+  }) => Promise<{ readingContent: string; sourceLabel: string; keyPhrases: string[] }>;
   tokenizeFn?: typeof tokenize;
   chunkFn?: typeof chunkWords;
   bionicFn?: typeof applyBionicMode;
@@ -42,6 +50,7 @@ interface ReadingPipelineResult {
   words: Word[];
   sourceWords: Word[];
   sourceLabel: string;
+  keyPhrases: string[];
 }
 
 export async function buildReadingPipeline(
@@ -124,7 +133,39 @@ export async function buildReadingPipeline(
         sourceLabel: summaryResult.sourceLabel,
       };
 
-  const tokenized = tokenizeFn(translateResult.readingContent);
+  const keyPhrasesResult = input.keyPhrasesOption?.enabled
+    ? await (async () => {
+        const keyPhrasesBefore =
+          deps.keyPhrasesBefore ??
+          (async (keyPhrasesInput: {
+            documentContent: string;
+            sourceLabel: string;
+            keyPhrasesOption: KeyPhrasesOption;
+          }) => {
+            const { keyPhrasesBeforeRsvp } = await import("./key-phrases-flow");
+            return keyPhrasesBeforeRsvp(keyPhrasesInput);
+          });
+
+        return keyPhrasesBefore({
+          documentContent: translateResult.readingContent,
+          sourceLabel: translateResult.sourceLabel,
+          keyPhrasesOption: input.keyPhrasesOption ?? {
+            enabled: false,
+            mode: null,
+            maxPhrases: null,
+          },
+        });
+      })()
+    : {
+        readingContent: translateResult.readingContent,
+        sourceLabel: translateResult.sourceLabel,
+        keyPhrases: [],
+      };
+
+  const tokenized = annotateWordsWithKeyPhrases(
+    tokenizeFn(keyPhrasesResult.readingContent),
+    keyPhrasesResult.keyPhrases
+  );
   const words =
     deps.chunkFn || deps.bionicFn
       ? input.mode === "chunked"
@@ -137,6 +178,7 @@ export async function buildReadingPipeline(
   return {
     words,
     sourceWords: tokenized,
-    sourceLabel: translateResult.sourceLabel,
+    sourceLabel: keyPhrasesResult.sourceLabel,
+    keyPhrases: keyPhrasesResult.keyPhrases,
   };
 }

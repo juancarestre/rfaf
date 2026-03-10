@@ -12,6 +12,7 @@ interface WordDisplayProps {
   renderMode?: "normal" | "expanded";
   orpVisualStyle?: "default" | "subtle";
   bionicPrefixLength?: number;
+  keyPhraseMatch?: boolean;
 }
 
 const MAX_EXPANDED_RENDER_CHARS = 256;
@@ -66,12 +67,14 @@ export function getWordDisplayLayout(
   word: string,
   pivotColumn: number,
   renderMode: "normal" | "expanded" = "normal",
-  bionicPrefixLength = 0
+  bionicPrefixLength = 0,
+  keyPhraseMatch = false
 ): WordDisplayLayout {
   const safeWord = sanitizeTerminalText(word || "");
   const baseDisplayWord =
     renderMode === "expanded" ? truncateExpandedRenderWord(safeWord) : safeWord;
-  const displayWord = emphasizePrefixAlphaNumeric(baseDisplayWord, bionicPrefixLength);
+  const prefixedWord = emphasizePrefixAlphaNumeric(baseDisplayWord, bionicPrefixLength);
+  const displayWord = keyPhraseMatch ? prefixedWord.toUpperCase() : prefixedWord;
   const rawOrp = getORPIndex(displayWord.length);
   const orp = displayWord.length > 0 ? Math.min(rawOrp, displayWord.length - 1) : 0;
 
@@ -108,12 +111,14 @@ export function WordDisplay({
   renderMode = "normal",
   orpVisualStyle = "default",
   bionicPrefixLength = 0,
+  keyPhraseMatch = false,
 }: WordDisplayProps) {
   const { before, pivot, after, leftPadding } = getWordDisplayLayout(
     word,
     pivotColumn,
     renderMode,
-    bionicPrefixLength
+    bionicPrefixLength,
+    keyPhraseMatch
   );
 
   const noColor = Boolean(process.env.NO_COLOR);

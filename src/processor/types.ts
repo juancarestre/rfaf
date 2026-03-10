@@ -24,4 +24,6 @@ export interface Word {
   sourceWords?: Word[];
   /** Optional leading character count to emphasize in bionic mode */
   bionicPrefixLength?: number;
+  /** Whether this token is part of an extracted key phrase */
+  keyPhraseMatch?: boolean;
 }

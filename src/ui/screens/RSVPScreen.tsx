@@ -25,6 +25,7 @@ import { ProgressBar } from "../components/ProgressBar";
 import { StatusBar } from "../components/StatusBar";
 import { WordDisplay } from "../components/WordDisplay";
 import { getTextScaleConfig, type TextScalePreset } from "../text-scale";
+import { sanitizeTerminalText } from "../sanitize-terminal-text";
 
 interface RSVPScreenProps {
   words: Word[];
@@ -32,6 +33,7 @@ interface RSVPScreenProps {
   sourceLabel: string;
   textScale: TextScalePreset;
   mode: ReadingMode;
+  keyPhrasePreview?: string[];
   reader?: Reader;
   session?: Session;
   updateReader?: (transform: (reader: Reader) => Reader) => void;
@@ -109,6 +111,7 @@ export function RSVPScreen({
   sourceLabel,
   textScale,
   mode,
+  keyPhrasePreview = [],
   reader,
   session,
   updateReader,
@@ -318,6 +321,17 @@ export function RSVPScreen({
     return "Idle";
   }, [activeReader.currentIndex, activeReader.state, activeSession, mode]);
 
+  const showKeyPhrasePreview =
+    keyPhrasePreview.length > 0 &&
+    activeReader.state === "paused" &&
+    activeReader.currentIndex === 0 &&
+    activeSession.startTimeMs === null &&
+    !activeHelpVisible;
+  const safeKeyPhrasePreview = useMemo(
+    () => keyPhrasePreview.map((phrase) => sanitizeTerminalText(phrase)),
+    [keyPhrasePreview]
+  );
+
   return (
     <Box flexDirection="column" width={width} height={height} alignItems="flex-start">
       {tooSmall ? (
@@ -339,17 +353,28 @@ export function RSVPScreen({
                 mode={mode}
               />
             ) : (
-              <WordDisplay
-                word={currentWord}
-                pivotColumn={Math.max(8, Math.floor(width / 2))}
-                topPaddingLines={textScaleConfig.wordTopPadding}
-                bottomPaddingLines={textScaleConfig.wordBottomPadding}
-                renderMode={textScaleConfig.wordRenderMode}
-                orpVisualStyle={getOrpVisualStyle(mode)}
-                bionicPrefixLength={
-                  mode === "bionic" ? currentWordEntry?.bionicPrefixLength ?? 0 : 0
-                }
-              />
+              <>
+                {showKeyPhrasePreview ? (
+                  <Box flexDirection="column" marginBottom={1}>
+                    <Text bold>Key phrases:</Text>
+                    {safeKeyPhrasePreview.map((phrase, index) => (
+                      <Text key={`${index}-${phrase}`}>{`- ${phrase}`}</Text>
+                    ))}
+                  </Box>
+                ) : null}
+                <WordDisplay
+                  word={currentWord}
+                  pivotColumn={Math.max(8, Math.floor(width / 2))}
+                  topPaddingLines={textScaleConfig.wordTopPadding}
+                  bottomPaddingLines={textScaleConfig.wordBottomPadding}
+                  renderMode={textScaleConfig.wordRenderMode}
+                  orpVisualStyle={getOrpVisualStyle(mode)}
+                  bionicPrefixLength={
+                    mode === "bionic" ? currentWordEntry?.bionicPrefixLength ?? 0 : 0
+                  }
+                  keyPhraseMatch={currentWordEntry?.keyPhraseMatch ?? false}
+                />
+              </>
             )}
           </Box>
           <ProgressBar progress={progress} width={40} />

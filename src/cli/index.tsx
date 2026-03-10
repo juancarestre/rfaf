@@ -16,6 +16,11 @@ import { sanitizeTerminalText } from "../ui/sanitize-terminal-text";
 import { App } from "../ui/App";
 import { SummarizeRuntimeError, UsageError } from "./errors";
 import {
+  KEY_PHRASES_OUTPUT_MODES,
+  resolveKeyPhrasesOption,
+  wasKeyPhrasesFlagProvided,
+} from "./key-phrases-option";
+import {
   DEFAULT_READING_MODE,
   READING_MODES,
   resolveReadingMode,
@@ -200,6 +205,42 @@ function normalizeTranslateArgs(rawArgs: string[]): string[] {
   return normalized;
 }
 
+function normalizeKeyPhrasesArgs(rawArgs: string[]): string[] {
+  const normalized: string[] = [];
+
+  for (let index = 0; index < rawArgs.length; index++) {
+    const token = rawArgs[index];
+
+    if (token === "--key-phrases") {
+      const next = rawArgs[index + 1];
+
+      if (next === undefined || next.startsWith("-")) {
+        normalized.push("--key-phrases=");
+        continue;
+      }
+
+      const normalizedMode = next.trim().toLowerCase();
+      if (KEY_PHRASES_OUTPUT_MODES.includes(normalizedMode as (typeof KEY_PHRASES_OUTPUT_MODES)[number])) {
+        normalized.push(`--key-phrases=${next}`);
+        index += 1;
+        continue;
+      }
+
+      normalized.push("--key-phrases=");
+      continue;
+    }
+
+    if (token.startsWith("--key-phrases=")) {
+      normalized.push(token);
+      continue;
+    }
+
+    normalized.push(token);
+  }
+
+  return normalized;
+}
+
 function validateNoBsArgs(rawArgs: string[]): void {
   for (const token of rawArgs) {
     if (token.startsWith("--no-bs=")) {
@@ -233,7 +274,9 @@ function redactSecrets(
 async function main() {
   const rawArgs = hideBin(process.argv);
   validateNoBsArgs(rawArgs);
-  const normalizedArgs = normalizeTranslateArgs(normalizeSummaryArgs(rawArgs));
+  const normalizedArgs = normalizeKeyPhrasesArgs(
+    normalizeTranslateArgs(normalizeSummaryArgs(rawArgs))
+  );
   const parser = yargs(normalizedArgs)
     .scriptName("rfaf")
     .usage("$0 [input] [options]")
@@ -263,6 +306,10 @@ async function main() {
     .option("translate-to", {
       type: "string",
       describe: "Translate content to a target language (e.g. es, pt-BR, english)",
+    })
+    .option("key-phrases", {
+      type: "string",
+      describe: `Extract key phrases before reading (${KEY_PHRASES_OUTPUT_MODES.join("|")}); bare --key-phrases uses preview`,
     })
     .option("clipboard", {
       type: "boolean",
@@ -313,6 +360,10 @@ async function main() {
   const translateOption = resolveTranslateOption(
     argv["translate-to"],
     wasTranslateFlagProvided(normalizedArgs)
+  );
+  const keyPhrasesOption = resolveKeyPhrasesOption(
+    argv["key-phrases"],
+    wasKeyPhrasesFlagProvided(normalizedArgs)
   );
 
   if (argv.help || argv.version) {
@@ -399,8 +450,18 @@ async function main() {
     noBsOption,
     summaryOption,
     translateOption,
+    keyPhrasesOption,
     mode,
   });
+
+  if (keyPhrasesOption.enabled && keyPhrasesOption.mode === "list") {
+    const phrases = readingPipeline.keyPhrases;
+    process.stdout.write(`Key phrases (${phrases.length}):\n`);
+    for (const phrase of phrases) {
+      process.stdout.write(`- ${sanitizeTerminalText(phrase)}\n`);
+    }
+    return;
+  }
 
   const sourceWords = readingPipeline.sourceWords;
   const sourceLabel = readingPipeline.sourceLabel;
@@ -412,13 +473,14 @@ async function main() {
     exitAlternateScreen,
     renderApp: (stdin) =>
       render(
-        <App
-          sourceWords={sourceWords}
-          initialWpm={wpm}
-          sourceLabel={sourceLabel}
-          textScale={textScale}
-          initialMode={mode}
-        />,
+          <App
+            sourceWords={sourceWords}
+            initialWpm={wpm}
+            sourceLabel={sourceLabel}
+            textScale={textScale}
+            initialMode={mode}
+            keyPhrasePreview={readingPipeline.keyPhrases}
+          />,
         {
           stdin,
           exitOnCtrlC: true,
@@ -449,6 +511,7 @@ main().catch((error: unknown) => {
     renderedMessage.includes("--summary") ||
     renderedMessage.includes("--mode") ||
     renderedMessage.includes("--translate-to") ||
+    renderedMessage.includes("--key-phrases") ||
     renderedMessage.startsWith("Config error:")
   ) {
     process.exit(2);

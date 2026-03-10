@@ -21,9 +21,17 @@ interface AppProps {
   sourceLabel: string;
   textScale: TextScalePreset;
   initialMode: ReadingMode;
+  keyPhrasePreview?: string[];
 }
 
-export function App({ sourceWords, initialWpm, sourceLabel, textScale, initialMode }: AppProps) {
+export function App({
+  sourceWords,
+  initialWpm,
+  sourceLabel,
+  textScale,
+  initialMode,
+  keyPhrasePreview = [],
+}: AppProps) {
   const { exit } = useApp();
   const [runtime, setRuntime] = useState<AppRuntimeState>(() =>
     createAppRuntimeState(sourceWords, initialMode, initialWpm)
@@ -76,6 +84,7 @@ export function App({ sourceWords, initialWpm, sourceLabel, textScale, initialMo
         sourceLabel={sourceLabel}
         textScale={textScale}
         mode={runtime.activeMode}
+        keyPhrasePreview={keyPhrasePreview}
         reader={runtime.reader}
         session={runtime.session}
         updateReader={updateReader}
@@ -94,6 +103,7 @@ export function App({ sourceWords, initialWpm, sourceLabel, textScale, initialMo
       sourceLabel={sourceLabel}
       textScale={textScale}
       mode={runtime.activeMode}
+      keyPhrasePreview={keyPhrasePreview}
       reader={runtime.reader}
       session={runtime.session}
       updateReader={updateReader}

@@ -53,4 +53,40 @@ describe("Chunked screen layout", () => {
 
     expect(output).toContain("Press Space to start (Chunked)");
   });
+
+  it("renders key phrase preview before playback start", () => {
+    const chunks = chunkWords(makeWords());
+
+    const output = renderToString(
+      React.createElement(RSVPScreen, {
+        words: chunks,
+        keyPhrasePreview: ["one two three"],
+        initialWpm: 300,
+        sourceLabel: "stdin",
+        textScale: "normal",
+        mode: "chunked",
+      })
+    );
+
+    expect(output).toContain("Key phrases:");
+    expect(output).toContain("- one two three");
+  });
+
+  it("sanitizes key phrase preview text before rendering", () => {
+    const chunks = chunkWords(makeWords());
+
+    const output = renderToString(
+      React.createElement(RSVPScreen, {
+        words: chunks,
+        keyPhrasePreview: ["\u001b[31mone two three\u001b[0m"],
+        initialWpm: 300,
+        sourceLabel: "stdin",
+        textScale: "normal",
+        mode: "chunked",
+      })
+    );
+
+    expect(output).toContain("- one two three");
+    expect(output).not.toContain("\u001b[");
+  });
 });

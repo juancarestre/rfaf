@@ -43,6 +43,11 @@ describe("WordDisplay layout", () => {
     expect(layout.before + layout.pivot + layout.after).toBe("REader");
   });
 
+  it("emphasizes full word when key phrase match is present", () => {
+    const layout = getWordDisplayLayout("reader", 12, "normal", 0, true);
+    expect(layout.before + layout.pivot + layout.after).toBe("READER");
+  });
+
   it("uses expanded uppercase spacing for large-word mode", () => {
     const layout = getWordDisplayLayout("hello", 12, "expanded");
     expect(layout.before).toBe("H ");

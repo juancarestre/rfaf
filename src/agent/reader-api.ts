@@ -7,6 +7,7 @@ import {
   DEFAULT_SUMMARY_PRESET,
   type SummaryPreset,
 } from "../cli/summary-option";
+import { DEFAULT_KEY_PHRASES_MAX_PHRASES } from "../cli/key-phrases-option";
 import {
   DEFAULT_TEXT_SCALE,
   type TextScalePreset,
@@ -32,10 +33,12 @@ import {
 } from "../engine/session";
 import {
   NoBsRuntimeError,
+  KeyPhrasesRuntimeError,
   SummarizeRuntimeError,
   TranslateRuntimeError,
   UsageError,
 } from "../cli/errors";
+import { extractKeyPhrases } from "../llm/key-phrases";
 import { noBsText } from "../llm/no-bs";
 import { summarizeText } from "../llm/summarize";
 import { translateContentInChunks } from "../llm/translate-chunking";
@@ -45,6 +48,7 @@ import {
 } from "../llm/language-normalizer";
 import { translateText } from "../llm/translate";
 import { applyDeterministicNoBs } from "../processor/no-bs-cleaner";
+import { annotateWordsWithKeyPhrases } from "../processor/key-phrase-annotation";
 import { getWordsForMode, type ModeWordCache, transformWordsForMode } from "../processor/mode-transform";
 import {
   computeLineMap,
@@ -92,9 +96,11 @@ export interface AgentReaderRuntime {
   textScale: TextScalePreset;
   readingMode: ReadingMode;
   sourceWords: Word[];
+  sourceText: string;
   modeWordCache: ModeWordCache;
   lineMapCache: AgentLineMapCache | null;
   summary: AgentSummaryContext;
+  keyPhrases: string[];
 }
 
 export type AgentReaderCommand =
@@ -125,7 +131,11 @@ export interface AgentReaderState {
   summaryProvider: LLMConfig["provider"] | null;
   summaryModel: string | null;
   summarySourceLabel: string | null;
+  keyPhrases: string[];
+  keyPhrasesCount: number;
 }
+
+type AgentKeyPhrasesMode = "preview" | "list";
 
 interface AgentSummarizeCommand {
   preset: SummaryPreset;
@@ -146,6 +156,15 @@ interface AgentTranslateCommand {
   target: string;
   sourceLabel: string;
   readingMode?: ReadingMode;
+  signal?: AbortSignal;
+  llmConfig: Pick<LLMConfig, "provider" | "model" | "apiKey" | "timeoutMs" | "maxRetries">;
+}
+
+interface AgentKeyPhrasesCommand {
+  sourceLabel: string;
+  mode?: AgentKeyPhrasesMode;
+  readingMode?: ReadingMode;
+  maxPhrases?: number;
   signal?: AbortSignal;
   llmConfig: Pick<LLMConfig, "provider" | "model" | "apiKey" | "timeoutMs" | "maxRetries">;
 }
@@ -233,6 +252,70 @@ export class AgentIngestClipboardError extends Error {
 }
 
 const AGENT_SCROLL_CONTENT_WIDTH = 78;
+const MIN_LLM_TIMEOUT_MS = 1;
+const MAX_LLM_TIMEOUT_MS = 60_000;
+const MAX_LLM_RETRIES = 5;
+
+function wordsToSourceText(words: Word[]): string {
+  return words.map((word) => word.text).join(" ");
+}
+
+function redactSecrets(message: string, secrets: Array<string | undefined>): string {
+  let redacted = message;
+  for (const secret of secrets) {
+    if (!secret || secret.length < 8) {
+      continue;
+    }
+    redacted = redacted.split(secret).join("[REDACTED]");
+  }
+
+  return redacted.replace(/(sk|AIza)[A-Za-z0-9_\-]{8,}/g, "[REDACTED]");
+}
+
+function sanitizeRuntimeMessage(message: string, apiKey?: string): string {
+  return sanitizeTerminalText(redactSecrets(message, [apiKey]));
+}
+
+function normalizeLlmRuntimeBounds(
+  llmConfig: Pick<LLMConfig, "timeoutMs" | "maxRetries">
+): { timeoutMs: number; maxRetries: number } {
+  if (!Number.isFinite(llmConfig.timeoutMs) || !Number.isInteger(llmConfig.timeoutMs)) {
+    throw new UsageError("Invalid llmConfig.timeoutMs. It must be an integer.");
+  }
+
+  if (llmConfig.timeoutMs < MIN_LLM_TIMEOUT_MS || llmConfig.timeoutMs > MAX_LLM_TIMEOUT_MS) {
+    throw new UsageError(
+      `Invalid llmConfig.timeoutMs. It must be between ${MIN_LLM_TIMEOUT_MS} and ${MAX_LLM_TIMEOUT_MS}.`
+    );
+  }
+
+  if (!Number.isFinite(llmConfig.maxRetries) || !Number.isInteger(llmConfig.maxRetries)) {
+    throw new UsageError("Invalid llmConfig.maxRetries. It must be an integer.");
+  }
+
+  if (llmConfig.maxRetries < 0 || llmConfig.maxRetries > MAX_LLM_RETRIES) {
+    throw new UsageError(
+      `Invalid llmConfig.maxRetries. It must be between 0 and ${MAX_LLM_RETRIES}.`
+    );
+  }
+
+  return {
+    timeoutMs: llmConfig.timeoutMs,
+    maxRetries: llmConfig.maxRetries,
+  };
+}
+
+function resolveKeyPhrasesMode(value: unknown): AgentKeyPhrasesMode {
+  if (value === undefined) {
+    return "preview";
+  }
+
+  if (value === "preview" || value === "list") {
+    return value;
+  }
+
+  throw new UsageError("Invalid key-phrases mode. Use one of: preview, list.");
+}
 
 function isReadingMode(value: string): value is ReadingMode {
   return READING_MODES.includes(value as ReadingMode);
@@ -346,6 +429,7 @@ export function createAgentReaderRuntime(
     textScale,
     readingMode,
     sourceWords,
+    sourceText: wordsToSourceText(sourceWords),
     modeWordCache,
     lineMapCache: null,
     summary: {
@@ -355,6 +439,7 @@ export function createAgentReaderRuntime(
       model: null,
       sourceLabel: null,
     },
+    keyPhrases: [],
   };
 }
 
@@ -570,33 +655,35 @@ export async function executeAgentSummarizeCommand(
     command.readingMode === undefined
       ? runtime.readingMode
       : requireReadingMode(command.readingMode, "summarize command");
+  const runtimeBounds = normalizeLlmRuntimeBounds(command.llmConfig);
 
-  const originalContent = runtime.sourceWords.map((word) => word.text).join(" ");
+  const originalContent = runtime.sourceText;
   let summaryContent: string;
   try {
     summaryContent = await summarize({
       provider: command.llmConfig.provider,
       model: command.llmConfig.model,
-      apiKey: command.llmConfig.apiKey,
-      preset: command.preset,
-      input: originalContent,
-      timeoutMs: command.llmConfig.timeoutMs,
-      maxRetries: command.llmConfig.maxRetries,
-      signal: command.signal,
-    });
+        apiKey: command.llmConfig.apiKey,
+        preset: command.preset,
+        input: originalContent,
+        timeoutMs: runtimeBounds.timeoutMs,
+        maxRetries: runtimeBounds.maxRetries,
+        signal: command.signal,
+      });
   } catch (error: unknown) {
     if (error instanceof SummarizeRuntimeError) {
       const provider = sanitizeTerminalText(command.llmConfig.provider);
       const model = sanitizeTerminalText(command.llmConfig.model);
+      const safeMessage = sanitizeRuntimeMessage(error.message, command.llmConfig.apiKey);
       throw new SummarizeRuntimeError(
-        `${error.message} (provider=${provider}, model=${model})`,
+        `${safeMessage} (provider=${provider}, model=${model})`,
         error.stage
       );
     }
 
     const message = error instanceof Error ? error.message : String(error);
     throw new SummarizeRuntimeError(
-      `Summarization failed [runtime]: ${sanitizeTerminalText(message)}`,
+      `Summarization failed [runtime]: ${sanitizeRuntimeMessage(message, command.llmConfig.apiKey)}`,
       "runtime"
     );
   }
@@ -615,6 +702,7 @@ export async function executeAgentSummarizeCommand(
     textScale: runtime.textScale,
     readingMode,
     sourceWords: summaryWords,
+    sourceText: wordsToSourceText(summaryWords),
     modeWordCache,
     lineMapCache: null,
     summary: {
@@ -628,6 +716,7 @@ export async function executeAgentSummarizeCommand(
         readingMode
       ),
     },
+    keyPhrases: [],
   };
 }
 
@@ -641,8 +730,9 @@ export async function executeAgentNoBsCommand(
     command.readingMode === undefined
       ? runtime.readingMode
       : requireReadingMode(command.readingMode, "no-bs command");
+  const runtimeBounds = normalizeLlmRuntimeBounds(command.llmConfig);
 
-  const originalContent = runtime.sourceWords.map((word) => word.text).join(" ");
+  const originalContent = runtime.sourceText;
   const deterministicCleaned = cleanText(originalContent);
   if (!deterministicCleaned.trim()) {
     throw new NoBsRuntimeError("No-BS failed [schema]: no-bs produced empty text.", "schema");
@@ -652,26 +742,27 @@ export async function executeAgentNoBsCommand(
   try {
     cleanedContent = await runNoBs({
       provider: command.llmConfig.provider,
-      model: command.llmConfig.model,
-      apiKey: command.llmConfig.apiKey,
-      input: deterministicCleaned,
-      timeoutMs: command.llmConfig.timeoutMs,
-      maxRetries: command.llmConfig.maxRetries,
-      signal: command.signal,
-    });
+        model: command.llmConfig.model,
+        apiKey: command.llmConfig.apiKey,
+        input: deterministicCleaned,
+        timeoutMs: runtimeBounds.timeoutMs,
+        maxRetries: runtimeBounds.maxRetries,
+        signal: command.signal,
+      });
   } catch (error: unknown) {
     if (error instanceof NoBsRuntimeError) {
       const provider = sanitizeTerminalText(command.llmConfig.provider);
       const model = sanitizeTerminalText(command.llmConfig.model);
+      const safeMessage = sanitizeRuntimeMessage(error.message, command.llmConfig.apiKey);
       throw new NoBsRuntimeError(
-        `${error.message} (provider=${provider}, model=${model})`,
+        `${safeMessage} (provider=${provider}, model=${model})`,
         error.stage
       );
     }
 
     const message = error instanceof Error ? error.message : String(error);
     throw new NoBsRuntimeError(
-      `No-BS failed [runtime]: ${sanitizeTerminalText(message)}`,
+      `No-BS failed [runtime]: ${sanitizeRuntimeMessage(message, command.llmConfig.apiKey)}`,
       "runtime"
     );
   }
@@ -690,6 +781,7 @@ export async function executeAgentNoBsCommand(
     textScale: runtime.textScale,
     readingMode,
     sourceWords: cleanedWords,
+    sourceText: wordsToSourceText(cleanedWords),
     modeWordCache,
     lineMapCache: null,
     summary: {
@@ -699,6 +791,7 @@ export async function executeAgentNoBsCommand(
       model: null,
       sourceLabel: `${command.sourceLabel} (no-bs)`,
     },
+    keyPhrases: [],
   };
 }
 
@@ -712,17 +805,18 @@ export async function executeAgentTranslateCommand(
     command.readingMode === undefined
       ? runtime.readingMode
       : requireReadingMode(command.readingMode, "translate command");
+  const runtimeBounds = normalizeLlmRuntimeBounds(command.llmConfig);
 
   let targetLanguage: string;
   try {
     targetLanguage = await normalizeTarget({
       target: command.target,
       provider: command.llmConfig.provider,
-      model: command.llmConfig.model,
-      apiKey: command.llmConfig.apiKey,
-      timeoutMs: command.llmConfig.timeoutMs,
-      maxRetries: command.llmConfig.maxRetries,
-    });
+        model: command.llmConfig.model,
+        apiKey: command.llmConfig.apiKey,
+        timeoutMs: runtimeBounds.timeoutMs,
+        maxRetries: runtimeBounds.maxRetries,
+      });
   } catch (error: unknown) {
     if (error instanceof LanguageNormalizationError) {
       throw new UsageError(error.message);
@@ -730,7 +824,7 @@ export async function executeAgentTranslateCommand(
     throw error;
   }
 
-  const originalContent = runtime.sourceWords.map((word) => word.text).join(" ");
+  const originalContent = runtime.sourceText;
   let translatedContent: string;
   try {
     translatedContent = await translateContentInChunks({
@@ -742,8 +836,8 @@ export async function executeAgentTranslateCommand(
           apiKey: command.llmConfig.apiKey,
           targetLanguage,
           input: chunk,
-          timeoutMs: command.llmConfig.timeoutMs,
-          maxRetries: command.llmConfig.maxRetries,
+          timeoutMs: runtimeBounds.timeoutMs,
+          maxRetries: runtimeBounds.maxRetries,
           signal: command.signal,
         }),
     });
@@ -751,15 +845,16 @@ export async function executeAgentTranslateCommand(
     if (error instanceof TranslateRuntimeError) {
       const provider = sanitizeTerminalText(command.llmConfig.provider);
       const model = sanitizeTerminalText(command.llmConfig.model);
+      const safeMessage = sanitizeRuntimeMessage(error.message, command.llmConfig.apiKey);
       throw new TranslateRuntimeError(
-        `${error.message} (provider=${provider}, model=${model})`,
+        `${safeMessage} (provider=${provider}, model=${model})`,
         error.stage
       );
     }
 
     const message = error instanceof Error ? error.message : String(error);
     throw new TranslateRuntimeError(
-      `Translation failed [runtime]: ${sanitizeTerminalText(message)}`,
+      `Translation failed [runtime]: ${sanitizeRuntimeMessage(message, command.llmConfig.apiKey)}`,
       "runtime"
     );
   }
@@ -778,6 +873,7 @@ export async function executeAgentTranslateCommand(
     textScale: runtime.textScale,
     readingMode,
     sourceWords: translatedWords,
+    sourceText: wordsToSourceText(translatedWords),
     modeWordCache,
     lineMapCache: null,
     summary: {
@@ -787,6 +883,97 @@ export async function executeAgentTranslateCommand(
       model: null,
       sourceLabel: buildTranslatedSourceLabel(command.sourceLabel, targetLanguage, readingMode),
     },
+    keyPhrases: [],
+  };
+}
+
+export async function executeAgentKeyPhrasesCommand(
+  runtime: AgentReaderRuntime,
+  command: AgentKeyPhrasesCommand,
+  runExtract: typeof extractKeyPhrases = extractKeyPhrases
+): Promise<AgentReaderRuntime> {
+  const readingMode =
+    command.readingMode === undefined
+      ? runtime.readingMode
+      : requireReadingMode(command.readingMode, "key-phrases command");
+  const mode = resolveKeyPhrasesMode(command.mode);
+  const runtimeBounds = normalizeLlmRuntimeBounds(command.llmConfig);
+
+  const maxPhrases = Math.min(
+    10,
+    Math.max(5, command.maxPhrases ?? DEFAULT_KEY_PHRASES_MAX_PHRASES)
+  );
+
+  const originalContent = runtime.sourceText;
+  let keyPhrases: string[];
+  try {
+    keyPhrases = await runExtract({
+      provider: command.llmConfig.provider,
+      model: command.llmConfig.model,
+      apiKey: command.llmConfig.apiKey,
+      input: originalContent,
+      maxPhrases,
+      timeoutMs: runtimeBounds.timeoutMs,
+      maxRetries: runtimeBounds.maxRetries,
+      signal: command.signal,
+    });
+  } catch (error: unknown) {
+    if (error instanceof KeyPhrasesRuntimeError) {
+      const provider = sanitizeTerminalText(command.llmConfig.provider);
+      const model = sanitizeTerminalText(command.llmConfig.model);
+      const safeMessage = sanitizeRuntimeMessage(error.message, command.llmConfig.apiKey);
+      throw new KeyPhrasesRuntimeError(
+        `${safeMessage} (provider=${provider}, model=${model})`,
+        error.stage
+      );
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    throw new KeyPhrasesRuntimeError(
+      `Key-phrases failed [runtime]: ${sanitizeRuntimeMessage(message, command.llmConfig.apiKey)}`,
+      "runtime"
+    );
+  }
+
+  if (keyPhrases.length === 0) {
+    throw new KeyPhrasesRuntimeError(
+      "Key-phrases failed [schema]: extracted key phrases are empty.",
+      "schema"
+    );
+  }
+
+  if (mode === "list") {
+    return {
+      ...runtime,
+      keyPhrases,
+    };
+  }
+
+  const annotatedSourceWords = annotateWordsWithKeyPhrases(runtime.sourceWords, keyPhrases);
+  const { words: transformedWords, modeWordCache } = getWordsForMode(
+    annotatedSourceWords,
+    readingMode,
+    { rsvp: annotatedSourceWords }
+  );
+  const currentWpm = runtime.reader.currentWpm;
+
+  return {
+    reader: createReader(transformedWords, currentWpm),
+    session: createSession(currentWpm),
+    textScale: runtime.textScale,
+    readingMode,
+    sourceWords: annotatedSourceWords,
+    sourceText: runtime.sourceText,
+    modeWordCache,
+    lineMapCache: null,
+    summary: {
+      enabled: false,
+      preset: DEFAULT_SUMMARY_PRESET,
+      provider: null,
+      model: null,
+      sourceLabel: `${command.sourceLabel} (key-phrases)`,
+    },
+    keyPhrases,
   };
 }
 
@@ -883,9 +1070,11 @@ export function executeAgentCommand(
         textScale: runtime.textScale,
         readingMode: runtime.readingMode,
         sourceWords: runtime.sourceWords,
+        sourceText: runtime.sourceText,
         modeWordCache: runtime.modeWordCache,
         lineMapCache: runtime.lineMapCache,
         summary: runtime.summary,
+        keyPhrases: runtime.keyPhrases,
       };
     default: {
       const unreachable: never = command;
@@ -899,9 +1088,11 @@ export function executeAgentCommand(
     textScale: runtime.textScale,
     readingMode: runtime.readingMode,
     sourceWords: runtime.sourceWords,
+    sourceText: runtime.sourceText,
     modeWordCache: runtime.modeWordCache,
     lineMapCache: nextReader.words === runtime.reader.words ? nextLineMapCache : null,
     summary: runtime.summary,
+    keyPhrases: runtime.keyPhrases,
   };
 }
 
@@ -925,5 +1116,7 @@ export function getAgentReaderState(runtime: AgentReaderRuntime): AgentReaderSta
     summaryProvider: runtime.summary.provider,
     summaryModel: runtime.summary.model,
     summarySourceLabel: runtime.summary.sourceLabel,
+    keyPhrases: runtime.keyPhrases,
+    keyPhrasesCount: runtime.keyPhrases.length,
   };
 }

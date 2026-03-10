@@ -94,4 +94,43 @@ describe("GuidedScrollScreen layout", () => {
     const visibleWords = words.filter((w) => output.includes(w.text));
     expect(visibleWords.length).toBeGreaterThan(1);
   });
+
+  it("renders key phrase preview and emphasized matched words", () => {
+    const highlighted = makeWords().map((word) =>
+      word.text.toLowerCase() === "quick" || word.text.toLowerCase() === "brown"
+        ? { ...word, keyPhraseMatch: true }
+        : word
+    );
+
+    const output = renderToString(
+      React.createElement(GuidedScrollScreen, {
+        words: highlighted,
+        keyPhrasePreview: ["quick brown"],
+        initialWpm: 300,
+        sourceLabel: "stdin",
+        textScale: "normal" as const,
+        mode: "scroll" as const,
+      })
+    );
+
+    expect(output).toContain("Key phrases:");
+    expect(output).toContain("- quick brown");
+    expect(output).toContain("QUICK BROWN");
+  });
+
+  it("sanitizes key phrase preview output", () => {
+    const output = renderToString(
+      React.createElement(GuidedScrollScreen, {
+        words: makeWords(),
+        keyPhrasePreview: ["\u001b]8;;https://evil.test\u0007quick brown\u001b]8;;\u0007"],
+        initialWpm: 300,
+        sourceLabel: "stdin",
+        textScale: "normal" as const,
+        mode: "scroll" as const,
+      })
+    );
+
+    expect(output).toContain("- quick brown");
+    expect(output).not.toContain("\u001b]");
+  });
 });

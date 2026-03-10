@@ -52,6 +52,7 @@ function toChunkWord(chunkWords: Word[], chunkIndex: number): Word {
     isParagraphStart: first.isParagraphStart,
     trailingPunctuation: last.trailingPunctuation,
     sourceWords: chunkWords,
+    keyPhraseMatch: chunkWords.some((word) => word.keyPhraseMatch),
   };
 }
 

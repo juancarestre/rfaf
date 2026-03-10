@@ -7,12 +7,14 @@ import {
   executeAgentIngestClipboardCommand,
   executeAgentIngestFileCommand,
   executeAgentIngestUrlCommand,
+  executeAgentKeyPhrasesCommand,
   executeAgentNoBsCommand,
   executeAgentSummarizeCommand,
   executeAgentTranslateCommand,
   getAgentReaderState,
 } from "../../src/agent/reader-api";
 import {
+  KeyPhrasesRuntimeError,
   NoBsRuntimeError,
   SummarizeRuntimeError,
   TranslateRuntimeError,
@@ -63,6 +65,8 @@ describe("agent reader api", () => {
     expect(state.summaryEnabled).toBe(false);
     expect(state.summaryPreset).toBe("medium");
     expect(state.summaryProvider).toBeNull();
+    expect(state.keyPhrases).toEqual([]);
+    expect(state.keyPhrasesCount).toBe(0);
   });
 
   it("supports runtime text-scale configuration", () => {
@@ -192,6 +196,131 @@ describe("agent reader api", () => {
     expect(state.summaryEnabled).toBe(false);
     expect(state.summarySourceLabel).toBe("stdin (translated:es)");
     expect(state.totalWords).toBe(4);
+  });
+
+  it("supports key-phrases emphasis through agent API", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    const nextRuntime = await executeAgentKeyPhrasesCommand(
+      runtime,
+      {
+        sourceLabel: "stdin",
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async () => ["first second"]
+    );
+
+    const state = getAgentReaderState(nextRuntime);
+    expect(state.currentWpm).toBe(320);
+    expect(state.keyPhrases).toEqual(["first second"]);
+    expect(state.keyPhrasesCount).toBe(1);
+    expect(state.summaryEnabled).toBe(false);
+    expect(state.summarySourceLabel).toBe("stdin (key-phrases)");
+    expect(nextRuntime.sourceWords[0]?.keyPhraseMatch).toBe(true);
+    expect(nextRuntime.sourceWords[1]?.keyPhraseMatch).toBe(true);
+  });
+
+  it("supports key-phrases list mode without mutating reader runtime", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    const nextRuntime = await executeAgentKeyPhrasesCommand(
+      runtime,
+      {
+        sourceLabel: "stdin",
+        mode: "list",
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async () => ["first second"]
+    );
+
+    expect(nextRuntime.reader).toBe(runtime.reader);
+    expect(nextRuntime.sourceWords).toBe(runtime.sourceWords);
+    expect(nextRuntime.keyPhrases).toEqual(["first second"]);
+    expect(getAgentReaderState(nextRuntime).keyPhrases).toEqual(["first second"]);
+  });
+
+  it("fails closed for invalid key-phrases list mode payload", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    await expect(
+      executeAgentKeyPhrasesCommand(
+        runtime,
+        {
+          sourceLabel: "stdin",
+          mode: "deep" as "preview",
+          llmConfig: {
+            provider: "openai",
+            model: "gpt-5-mini",
+            apiKey: "test",
+            timeoutMs: 1_000,
+            maxRetries: 0,
+          },
+        },
+        async () => ["first second"]
+      )
+    ).rejects.toThrow("Invalid key-phrases mode");
+  });
+
+  it("fails closed for out-of-range llm runtime bounds in key-phrases command", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    await expect(
+      executeAgentKeyPhrasesCommand(
+        runtime,
+        {
+          sourceLabel: "stdin",
+          llmConfig: {
+            provider: "openai",
+            model: "gpt-5-mini",
+            apiKey: "test",
+            timeoutMs: 120_000,
+            maxRetries: 99,
+          },
+        },
+        async () => ["first second"]
+      )
+    ).rejects.toThrow("Invalid llmConfig.timeoutMs");
+  });
+
+  it("fails closed on key-phrases runtime provider errors", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    await expect(
+      executeAgentKeyPhrasesCommand(
+        runtime,
+        {
+          sourceLabel: "stdin",
+          llmConfig: {
+            provider: "openai",
+            model: "gpt-5-mini",
+            apiKey: "test",
+            timeoutMs: 1_000,
+            maxRetries: 0,
+          },
+        },
+        async () => {
+          throw new KeyPhrasesRuntimeError(
+            "Key-phrases failed [provider]: authentication failed for selected provider/model.",
+            "provider"
+          );
+        }
+      )
+    ).rejects.toMatchObject({
+      name: "KeyPhrasesRuntimeError",
+      stage: "provider",
+    } satisfies Partial<KeyPhrasesRuntimeError>);
   });
 
   it("maps unresolved translate targets to usage errors for parity", async () => {

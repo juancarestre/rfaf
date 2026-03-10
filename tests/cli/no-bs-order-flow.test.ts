@@ -52,7 +52,7 @@ describe("no-bs + summary ordering", () => {
     expect(result.sourceLabel).toContain("summary:medium");
   });
 
-  it("runs no-bs then summary then translate before tokenize", async () => {
+  it("runs no-bs then summary then translate then key-phrases before tokenize", async () => {
     const calls: string[] = [];
 
     await buildReadingPipeline(
@@ -62,6 +62,7 @@ describe("no-bs + summary ordering", () => {
         noBsOption: { enabled: true },
         summaryOption: { enabled: true, preset: "medium" },
         translateOption: { enabled: true, target: "es" },
+        keyPhrasesOption: { enabled: true, mode: "preview", maxPhrases: 8 },
         mode: "rsvp",
       },
       {
@@ -86,6 +87,14 @@ describe("no-bs + summary ordering", () => {
             sourceLabel: "stdin (no-bs) (summary:medium) (translated:es)",
           };
         },
+        keyPhrasesBefore: async (input) => {
+          calls.push(`key-phrases:${input.documentContent}`);
+          return {
+            readingContent: input.documentContent,
+            sourceLabel: `${input.sourceLabel} (key-phrases)`,
+            keyPhrases: ["translated text"],
+          };
+        },
         tokenizeFn: (content) => {
           calls.push(`tokenize:${content}`);
           return [
@@ -105,6 +114,7 @@ describe("no-bs + summary ordering", () => {
       "no-bs:ORIGINAL TEXT",
       "summary:CLEAN TEXT",
       "translate:SUMMARY TEXT",
+      "key-phrases:TRANSLATED TEXT",
       "tokenize:TRANSLATED TEXT",
     ]);
   });
