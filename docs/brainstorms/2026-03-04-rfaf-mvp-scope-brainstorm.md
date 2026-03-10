@@ -74,12 +74,12 @@ We chose (1) because the reading engine IS the product. If RSVP doesn't feel gre
 
 ### Phase 6: Behavior Corrections + Final Polish
 28. Make `--summarize` output length proportional to source length (short text should stay short, long text should not collapse to a fixed ~1-minute read)
-29. Ensure `--no-bs` only removes fluff/noise and keeps core content without implicitly summarizing
+29. Ensure `--no-bs` works for big inputs like PDFs
       🐍 > $ bun run src/cli/index.tsx tests/fixtures/AldousHuxley-Laspuertasdelapercepción.pdf --no-bs
    [error] no-bs failed
    No-BS failed [schema]: content preservation check failed; cleaned text appears summarized or truncated. (provider=google, model=gemini-3.1-flash-lite-preview)
 30. Fix chunked-mode ORP highlighting so the painted character is never whitespace (fallback to nearest visible character)
-31. Migrate config from TOML to YAML (`~/.rfaf/config.yaml`) and update all dependencies (config loader, defaults, tests, fixtures, docs, sample configs)
+
 
 ## Open Questions
 
