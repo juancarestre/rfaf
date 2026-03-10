@@ -30,6 +30,7 @@ describe("help CLI contract", () => {
     expect(result.stdout).toContain("https://example.com/article");
     expect(result.stdout).toContain("rfaf --clipboard");
     expect(result.stdout).toContain("--summary=medium --mode");
+    expect(result.stdout).toContain("--strategy");
     expect(result.stdout).toContain("Runtime controls:");
     expect(result.stdout).toContain("1-4 switch mod");
   });

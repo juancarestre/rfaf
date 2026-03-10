@@ -5,6 +5,13 @@ export class UsageError extends Error {
   }
 }
 
+export class UserCancelledError extends Error {
+  constructor(message = "Cancelled by user.") {
+    super(message);
+    this.name = "UserCancelledError";
+  }
+}
+
 export class SummarizeRuntimeError extends Error {
   readonly stage: "provider" | "schema" | "network" | "timeout" | "runtime";
 
@@ -66,6 +73,19 @@ export class QuizRuntimeError extends Error {
   ) {
     super(message);
     this.name = "QuizRuntimeError";
+    this.stage = stage;
+  }
+}
+
+export class StrategyRuntimeError extends Error {
+  readonly stage: "provider" | "schema" | "network" | "timeout" | "runtime";
+
+  constructor(
+    message: string,
+    stage: "provider" | "schema" | "network" | "timeout" | "runtime" = "runtime"
+  ) {
+    super(message);
+    this.name = "StrategyRuntimeError";
     this.stage = stage;
   }
 }

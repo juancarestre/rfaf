@@ -46,6 +46,7 @@ import {
   LanguageNormalizationError,
   normalizeTargetLanguage,
 } from "../llm/language-normalizer";
+import { recommendStrategy } from "../llm/strategy";
 import { translateText } from "../llm/translate";
 import { applyDeterministicNoBs } from "../processor/no-bs-cleaner";
 import { annotateWordsWithKeyPhrases } from "../processor/key-phrase-annotation";
@@ -64,6 +65,8 @@ import { readUrl, type ReadUrlOptions } from "../ingest/url";
 import { readFileSource } from "../ingest/file-dispatcher";
 import { readClipboard } from "../ingest/clipboard";
 import { sanitizeTerminalText } from "../ui/sanitize-terminal-text";
+import { resolveModeAfterStrategy, strategyBeforeRsvp } from "../cli/strategy-flow";
+import { resolveStrategyOption } from "../cli/strategy-option";
 
 interface AgentSummaryContext {
   enabled: boolean;
@@ -169,6 +172,20 @@ interface AgentKeyPhrasesCommand {
   llmConfig: Pick<LLMConfig, "provider" | "model" | "apiKey" | "timeoutMs" | "maxRetries">;
 }
 
+interface AgentStrategyCommand {
+  selectedMode?: ReadingMode;
+  explicitModeProvided?: boolean;
+  signal?: AbortSignal;
+  llmConfig: Pick<LLMConfig, "provider" | "model" | "apiKey" | "timeoutMs" | "maxRetries">;
+}
+
+export interface AgentStrategyResult {
+  runtime: AgentReaderRuntime;
+  recommendedMode: ReadingMode | null;
+  appliedMode: ReadingMode;
+  rationale: string | null;
+  warning: string | null;
+}
 export interface AgentIngestUrlCommand {
   url: string;
   initialWpm?: number;
@@ -974,6 +991,66 @@ export async function executeAgentKeyPhrasesCommand(
       sourceLabel: `${command.sourceLabel} (key-phrases)`,
     },
     keyPhrases,
+  };
+}
+
+export async function executeAgentStrategyCommand(
+  runtime: AgentReaderRuntime,
+  command: AgentStrategyCommand,
+  runStrategy: typeof recommendStrategy = recommendStrategy
+): Promise<AgentStrategyResult> {
+  const selectedMode =
+    command.selectedMode === undefined
+      ? runtime.readingMode
+      : requireReadingMode(command.selectedMode, "strategy command");
+  const explicitModeProvided = command.explicitModeProvided ?? false;
+
+  const sourceContent = runtime.sourceText;
+
+  const strategyResult = await strategyBeforeRsvp({
+    documentContent: sourceContent,
+    strategyOption: resolveStrategyOption(true),
+    selectedMode,
+    explicitModeProvided,
+    signal: command.signal,
+    captureSigInt: false,
+    loadConfig: () => ({
+      provider: command.llmConfig.provider,
+      model: command.llmConfig.model,
+      apiKey: command.llmConfig.apiKey,
+      defaultPreset: DEFAULT_SUMMARY_PRESET,
+      timeoutMs: command.llmConfig.timeoutMs,
+      maxRetries: command.llmConfig.maxRetries,
+    }),
+    recommend: runStrategy,
+    createLoading: () => ({
+      start: () => {},
+      stop: () => {},
+      succeed: () => {},
+      fail: () => {},
+    }),
+  });
+
+  const appliedMode = resolveModeAfterStrategy({
+    selectedMode,
+    explicitModeProvided,
+    recommendedMode: strategyResult.recommendedMode,
+  });
+
+  const nextRuntime =
+    appliedMode === runtime.readingMode
+      ? runtime
+      : executeAgentCommand(runtime, {
+          type: "set_reading_mode",
+          readingMode: appliedMode,
+        });
+
+  return {
+    runtime: nextRuntime,
+    recommendedMode: strategyResult.recommendedMode,
+    appliedMode,
+    rationale: strategyResult.rationale,
+    warning: strategyResult.warning,
   };
 }
 

@@ -12,6 +12,10 @@ function modeError(): Error {
   return new Error(`Invalid --mode value. Use one of: ${READING_MODES.join(", ")}.`);
 }
 
+export function wasModeFlagProvided(argv: string[]): boolean {
+  return argv.some((arg) => arg === "--mode" || arg.startsWith("--mode="));
+}
+
 export function resolveReadingMode(value: unknown): ReadingMode {
   const rawValue = Array.isArray(value) ? value[value.length - 1] : value;
 
