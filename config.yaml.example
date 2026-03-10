@@ -1,0 +1,44 @@
+# rfaf YAML config example
+# Copy this file to: ~/.rfaf/config.yaml
+#
+# Priority order at runtime:
+# 1) CLI flags
+# 2) env vars
+# 3) ~/.rfaf/config.yaml
+# 4) built-in defaults
+
+llm:
+  # One of: openai, anthropic, google
+  provider: openai
+
+  # Model name for the selected provider
+  model: gpt-4o-mini
+
+  # Optional: direct key (prefer env vars in real usage)
+  # api_key: replace-me
+
+  # Optional: env var name that contains the API key
+  # Defaults by provider if omitted:
+  # - openai    -> OPENAI_API_KEY
+  # - anthropic -> ANTHROPIC_API_KEY
+  # - google    -> GOOGLE_GENERATIVE_AI_API_KEY
+  api_key_env: OPENAI_API_KEY
+
+display:
+  # Optional; reserved for UI defaults
+  text_scale: md
+
+reading:
+  # Optional; reserved for reading defaults
+  mode: rsvp
+  wpm: 300
+
+defaults:
+  # One of: short, medium, long
+  summary_preset: medium
+
+  # Request timeout in milliseconds
+  timeout_ms: 20000
+
+  # Retries for transient failures (429/network/5xx)
+  max_retries: 1

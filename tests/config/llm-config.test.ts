@@ -56,8 +56,8 @@ describe("resolveLLMConfig", () => {
           provider: "google",
           model: "gemini-2.0-flash",
         },
-        summary: {
-          default_preset: "long",
+        defaults: {
+          summary_preset: "long",
           timeout_ms: 12_000,
           max_retries: 3,
         },
@@ -88,6 +88,21 @@ describe("resolveLLMConfig", () => {
     ).toThrow("Config error: invalid provider");
   });
 
+  it("throws for invalid llm.api_key_env values", () => {
+    expect(() =>
+      resolveLLMConfig(
+        {
+          llm: {
+            provider: "openai",
+            model: "gpt-5-mini",
+            api_key_env: "not-valid-env-name",
+          },
+        },
+        {}
+      )
+    ).toThrow("Config error: invalid llm.api_key_env value");
+  });
+
   it("throws when provider key cannot be resolved", () => {
     expect(() =>
       resolveLLMConfig(
@@ -110,7 +125,7 @@ describe("resolveLLMConfig", () => {
             provider: "openai",
             model: "gpt-5-mini",
           },
-          summary: {
+          defaults: {
             timeout_ms: MAX_SUMMARIZE_TIMEOUT_MS + 1,
           },
         },
@@ -118,7 +133,7 @@ describe("resolveLLMConfig", () => {
           OPENAI_API_KEY: "test",
         }
       )
-    ).toThrow("Config error: invalid summary.timeout_ms value");
+    ).toThrow("Config error: invalid defaults.timeout_ms value");
   });
 
   it("throws when retries exceed max bound", () => {
@@ -129,7 +144,7 @@ describe("resolveLLMConfig", () => {
             provider: "openai",
             model: "gpt-5-mini",
           },
-          summary: {
+          defaults: {
             max_retries: MAX_SUMMARIZE_RETRIES + 1,
           },
         },
@@ -137,6 +152,55 @@ describe("resolveLLMConfig", () => {
           OPENAI_API_KEY: "test",
         }
       )
-    ).toThrow("Config error: invalid summary.max_retries value");
+    ).toThrow("Config error: invalid defaults.max_retries value");
+  });
+
+  it("throws for unknown root keys", () => {
+    expect(() =>
+      resolveLLMConfig(
+        {
+          llm: {
+            provider: "openai",
+            model: "gpt-5-mini",
+          },
+          summary: {
+            default_preset: "long",
+          },
+        },
+        {
+          OPENAI_API_KEY: "test",
+        }
+      )
+    ).toThrow("Config error: unknown key root.summary");
+  });
+
+  it("accepts full config sections without affecting llm resolution", () => {
+    const config = resolveLLMConfig(
+      {
+        llm: {
+          provider: "openai",
+          model: "gpt-5-mini",
+        },
+        display: {
+          text_scale: "comfortable",
+        },
+        reading: {
+          mode: "scroll",
+          wpm: 380,
+        },
+        defaults: {
+          summary_preset: "short",
+          timeout_ms: 8_000,
+          max_retries: 2,
+        },
+      },
+      {
+        OPENAI_API_KEY: "test",
+      }
+    );
+
+    expect(config.defaultPreset).toBe("short");
+    expect(config.timeoutMs).toBe(8_000);
+    expect(config.maxRetries).toBe(2);
   });
 });

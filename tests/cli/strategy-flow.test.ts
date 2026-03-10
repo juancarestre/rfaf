@@ -53,7 +53,7 @@ describe("strategyBeforeRsvp", () => {
       selectedMode: "rsvp",
       explicitModeProvided: false,
       loadConfig: () => {
-        throw new Error("Config error: missing config file at ~/.rfaf/config.toml");
+        throw new Error("Config error: missing config file at ~/.rfaf/config.yaml");
       },
     });
 

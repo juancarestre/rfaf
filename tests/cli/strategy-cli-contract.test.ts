@@ -68,15 +68,14 @@ describe("strategy CLI contract", () => {
     const rfafDir = join(homeDir, ".rfaf");
     mkdirSync(rfafDir, { recursive: true });
     writeFileSync(
-      join(rfafDir, "config.toml"),
+      join(rfafDir, "config.yaml"),
       [
-        "[llm]",
-        'provider = "openai"',
-        'model = "gpt-4o-mini"',
-        "",
-        "[summary]",
-        "timeout_ms = 5000",
-        "max_retries = 0",
+        "llm:",
+        "  provider: openai",
+        "  model: gpt-4o-mini",
+        "defaults:",
+        "  timeout_ms: 5000",
+        "  max_retries: 0",
       ].join("\n")
     );
 
@@ -102,15 +101,14 @@ describe("strategy CLI contract", () => {
     const rfafDir = join(homeDir, ".rfaf");
     mkdirSync(rfafDir, { recursive: true });
     writeFileSync(
-      join(rfafDir, "config.toml"),
+      join(rfafDir, "config.yaml"),
       [
-        "[llm]",
-        'provider = "openai"',
-        'model = "gpt-4o-mini"',
-        "",
-        "[summary]",
-        "timeout_ms = 5000",
-        "max_retries = 0",
+        "llm:",
+        "  provider: openai",
+        "  model: gpt-4o-mini",
+        "defaults:",
+        "  timeout_ms: 5000",
+        "  max_retries: 0",
       ].join("\n")
     );
 

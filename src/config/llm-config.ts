@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { SummaryPreset } from "../cli/summary-option";
 import { DEFAULT_SUMMARY_PRESET } from "../cli/summary-option";
 import { UsageError } from "../cli/errors";
@@ -20,8 +20,15 @@ interface RawRFAFConfig {
     api_key?: string;
     api_key_env?: string;
   };
-  summary?: {
-    default_preset?: string;
+  display?: {
+    text_scale?: string;
+  };
+  reading?: {
+    mode?: string;
+    wpm?: number;
+  };
+  defaults?: {
+    summary_preset?: string;
     timeout_ms?: number;
     max_retries?: number;
   };
@@ -52,7 +59,7 @@ function resolveSummaryPreset(value: unknown): SummaryPreset {
   }
 
   if (typeof value !== "string") {
-    throw new UsageError("Config error: invalid summary.default_preset value.");
+    throw new UsageError("Config error: invalid defaults.summary_preset value.");
   }
 
   const normalized = value.trim().toLowerCase();
@@ -60,7 +67,7 @@ function resolveSummaryPreset(value: unknown): SummaryPreset {
     return normalized;
   }
 
-  throw new UsageError("Config error: invalid summary.default_preset value.");
+  throw new UsageError("Config error: invalid defaults.summary_preset value.");
 }
 
 function resolveBoundedInt(
@@ -81,12 +88,92 @@ function resolveBoundedInt(
   return value;
 }
 
-export function resolveLLMConfig(
-  rawConfig: unknown,
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function ensureKnownKeys(
+  value: Record<string, unknown>,
+  allowedKeys: readonly string[],
+  path: string
+): void {
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.includes(key)) {
+      throw new UsageError(`Config error: unknown key ${path}.${key}.`);
+    }
+  }
+}
+
+function validateShape(rawConfig: unknown): RawRFAFConfig {
+  if (!isRecord(rawConfig)) {
+    throw new UsageError("Config error: root config must be a YAML object.");
+  }
+
+  ensureKnownKeys(rawConfig, ["llm", "display", "reading", "defaults"], "root");
+
+  if (rawConfig.llm !== undefined && !isRecord(rawConfig.llm)) {
+    throw new UsageError("Config error: llm must be an object.");
+  }
+  if (rawConfig.display !== undefined && !isRecord(rawConfig.display)) {
+    throw new UsageError("Config error: display must be an object.");
+  }
+  if (rawConfig.reading !== undefined && !isRecord(rawConfig.reading)) {
+    throw new UsageError("Config error: reading must be an object.");
+  }
+  if (rawConfig.defaults !== undefined && !isRecord(rawConfig.defaults)) {
+    throw new UsageError("Config error: defaults must be an object.");
+  }
+
+  if (isRecord(rawConfig.llm)) {
+    ensureKnownKeys(rawConfig.llm, ["provider", "model", "api_key", "api_key_env"], "llm");
+  }
+  if (isRecord(rawConfig.display)) {
+    ensureKnownKeys(rawConfig.display, ["text_scale"], "display");
+  }
+  if (isRecord(rawConfig.reading)) {
+    ensureKnownKeys(rawConfig.reading, ["mode", "wpm"], "reading");
+  }
+  if (isRecord(rawConfig.defaults)) {
+    ensureKnownKeys(rawConfig.defaults, ["summary_preset", "timeout_ms", "max_retries"], "defaults");
+  }
+
+  return rawConfig as RawRFAFConfig;
+}
+
+function maybeWarnPermissiveConfig(configPath: string, rawConfig: RawRFAFConfig): void {
+  if (!rawConfig.llm?.api_key?.trim()) {
+    return;
+  }
+
+  try {
+    const mode = statSync(configPath).mode & 0o777;
+    if ((mode & 0o077) !== 0) {
+      process.stderr.write(
+        `[warn] Config warning: ${configPath} has permissive permissions (${mode.toString(8)}); consider chmod 600.\n`
+      );
+    }
+  } catch {
+    // Ignore permission-check failures; loading should continue.
+  }
+}
+
+function migrationMessage(configPath: string, legacyPath: string): string {
+  return [
+    `Config error: TOML runtime config is no longer supported.`,
+    `Detected legacy config at ${legacyPath}.`,
+    `Migrate to YAML and save at ${configPath}.`,
+    `Run: cp ${legacyPath} ${configPath} && edit ${configPath} to YAML format.`,
+  ].join(" ");
+}
+
+function isValidEnvVarName(value: string): boolean {
+  return /^[A-Z_][A-Z0-9_]*$/.test(value);
+}
+
+function resolveValidatedLLMConfig(
+  config: RawRFAFConfig,
   env: Record<string, string | undefined>
 ): LLMConfig {
-  const config = (rawConfig ?? {}) as RawRFAFConfig;
-
   const providerRaw = (env.RFAF_LLM_PROVIDER ?? config.llm?.provider ?? "").trim().toLowerCase();
   if (!providerRaw || !isProvider(providerRaw)) {
     throw new UsageError(
@@ -100,6 +187,10 @@ export function resolveLLMConfig(
   }
 
   const configuredApiEnv = config.llm?.api_key_env?.trim();
+  if (configuredApiEnv && !isValidEnvVarName(configuredApiEnv)) {
+    throw new UsageError("Config error: invalid llm.api_key_env value.");
+  }
+
   const apiKeyEnv = configuredApiEnv || resolveDefaultApiKeyEnv(providerRaw);
   const apiKey = (env[apiKeyEnv] ?? config.llm?.api_key ?? "").trim();
   if (!apiKey) {
@@ -108,17 +199,17 @@ export function resolveLLMConfig(
     );
   }
 
-  const defaultPreset = resolveSummaryPreset(config.summary?.default_preset);
+  const defaultPreset = resolveSummaryPreset(config.defaults?.summary_preset);
   const timeoutMs = resolveBoundedInt(
-    config.summary?.timeout_ms,
-    "summary.timeout_ms",
+    config.defaults?.timeout_ms,
+    "defaults.timeout_ms",
     DEFAULT_SUMMARIZE_TIMEOUT_MS,
     1,
     MAX_SUMMARIZE_TIMEOUT_MS
   );
   const maxRetries = resolveBoundedInt(
-    config.summary?.max_retries,
-    "summary.max_retries",
+    config.defaults?.max_retries,
+    "defaults.max_retries",
     DEFAULT_SUMMARIZE_MAX_RETRIES,
     0,
     MAX_SUMMARIZE_RETRIES
@@ -134,26 +225,43 @@ export function resolveLLMConfig(
   };
 }
 
+export function resolveLLMConfig(
+  rawConfig: unknown,
+  env: Record<string, string | undefined>
+): LLMConfig {
+  const config = validateShape(rawConfig ?? {});
+  return resolveValidatedLLMConfig(config, env);
+}
+
 export function defaultConfigPath(): string {
-  return join(homedir(), ".rfaf", "config.toml");
+  return join(homedir(), ".rfaf", "config.yaml");
 }
 
 export function loadLLMConfig(
   env: Record<string, string | undefined>,
   configPath = env.RFAF_CONFIG_PATH ?? defaultConfigPath()
 ): LLMConfig {
+  const legacyPath = join(dirname(configPath), "config.toml");
+
   if (!existsSync(configPath)) {
+    if (!env.RFAF_CONFIG_PATH && existsSync(legacyPath)) {
+      throw new UsageError(migrationMessage(configPath, legacyPath));
+    }
+
     throw new UsageError(
-      `Config error: missing config file at ${configPath}. Create ~/.rfaf/config.toml.`
+      `Config error: missing config file at ${configPath}. Create ~/.rfaf/config.yaml.`
     );
   }
 
   let parsed: unknown;
   try {
-    parsed = Bun.TOML.parse(readFileSync(configPath, "utf8"));
+    parsed = Bun.YAML.parse(readFileSync(configPath, "utf8"));
   } catch {
-    throw new UsageError(`Config error: unable to parse TOML at ${configPath}.`);
+    throw new UsageError(`Config error: unable to parse YAML at ${configPath}.`);
   }
 
-  return resolveLLMConfig(parsed, env);
+  const shaped = validateShape(parsed);
+  maybeWarnPermissiveConfig(configPath, shaped);
+
+  return resolveValidatedLLMConfig(shaped, env);
 }

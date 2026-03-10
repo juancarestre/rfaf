@@ -15,7 +15,7 @@
 | Markdown | **marked** |
 | EPUB | **epub2** |
 | LLM Integration | **AI SDK** de Vercel (OpenAI, Anthropic, Ollama, etc.) |
-| Config | **~/.rfaf/config.toml** |
+| Config | **~/.rfaf/config.yaml** |
 | Lenguaje | **TypeScript** estricto |
 
 ## Arquitectura de Modulos
@@ -160,7 +160,7 @@ rfaf history                             # Ver sesiones anteriores
 rfaf history --stats                     # Estadisticas agregadas
 ```
 
-## Config File (`~/.rfaf/config.toml`)
+## Config File (`~/.rfaf/config.yaml`)
 
 ```toml
 [defaults]
@@ -289,7 +289,7 @@ La letra central se resalta en un color diferente como punto focal ORP.
 
 ### Fase 5: Polish
 
-21. Config file (~/.rfaf/config.toml)
+21. Config file (~/.rfaf/config.yaml)
 22. Session history + stats
 23. Speed ramping algorithms
 24. `bun build --compile` para distribucion

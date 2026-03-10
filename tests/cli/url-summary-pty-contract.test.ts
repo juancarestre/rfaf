@@ -24,13 +24,12 @@ fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 80, 0, 0))
 home = tempfile.mkdtemp(prefix='rfaf-url-summary-')
 rfaf_dir = Path(home) / '.rfaf'
 rfaf_dir.mkdir(parents=True, exist_ok=True)
-(rfaf_dir / 'config.toml').write_text('''[llm]
-provider = "openai"
-model = "gpt-4o-mini"
-
-[summary]
-timeout_ms = 5000
-max_retries = 0
+(rfaf_dir / 'config.yaml').write_text('''llm:
+  provider: openai
+  model: gpt-4o-mini
+defaults:
+  timeout_ms: 5000
+  max_retries: 0
 ''')
 
 def preexec():
