@@ -14,20 +14,26 @@ import { readClipboard } from "../ingest/clipboard";
 import type { Document } from "../ingest/types";
 import { sanitizeTerminalText } from "../ui/sanitize-terminal-text";
 import { App } from "../ui/App";
-import { SummarizeRuntimeError, UsageError } from "./errors";
+import { SummarizeRuntimeError, UsageError, UserCancelledError } from "./errors";
 import {
   DEFAULT_READING_MODE,
   READING_MODES,
   resolveReadingMode,
+  wasModeFlagProvided,
 } from "./mode-option";
 import { resolveNoBsOption } from "./no-bs-option";
 import { buildReadingPipeline } from "./reading-pipeline";
 import { runSessionLifecycle } from "./session-lifecycle";
 import {
+  resolveStrategyOption,
+  validateStrategyArgs,
+} from "./strategy-option";
+import {
   resolveSummaryOption,
   SUMMARY_PRESETS,
   wasSummaryFlagProvided,
 } from "./summary-option";
+import { resolveModeAfterStrategy, strategyBeforeRsvp } from "./strategy-flow";
 import {
   DEFAULT_TEXT_SCALE,
   resolveTextScale,
@@ -233,6 +239,7 @@ function redactSecrets(
 async function main() {
   const rawArgs = hideBin(process.argv);
   validateNoBsArgs(rawArgs);
+  validateStrategyArgs(rawArgs);
   const normalizedArgs = normalizeTranslateArgs(normalizeSummaryArgs(rawArgs));
   const parser = yargs(normalizedArgs)
     .scriptName("rfaf")
@@ -263,6 +270,11 @@ async function main() {
     .option("translate-to", {
       type: "string",
       describe: "Translate content to a target language (e.g. es, pt-BR, english)",
+    })
+    .option("strategy", {
+      type: "boolean",
+      default: false,
+      describe: "Recommend best reading mode before reading (advisory only)",
     })
     .option("clipboard", {
       type: "boolean",
@@ -305,7 +317,9 @@ async function main() {
   const wpm = parseWpm(argv.wpm);
   const textScale = resolveTextScale(argv.textScale);
   const mode = resolveReadingMode(argv.mode);
+  const modeFlagProvided = wasModeFlagProvided(normalizedArgs);
   const noBsOption = resolveNoBsOption(argv.noBs ?? argv["no-bs"]);
+  const strategyOption = resolveStrategyOption(argv.strategy);
   const summaryOption = resolveSummaryOption(
     argv.summary,
     wasSummaryFlagProvided(normalizedArgs)
@@ -393,13 +407,30 @@ async function main() {
     process.stderr.write(`${pendingWarning}\n`);
   }
 
+  const strategyResult = await strategyBeforeRsvp({
+    documentContent: document.content,
+    strategyOption,
+    selectedMode: mode,
+    explicitModeProvided: modeFlagProvided,
+  });
+
+  if (strategyResult.warning) {
+    process.stderr.write(`[warn] ${strategyResult.warning}\n`);
+  }
+
+  const effectiveMode = resolveModeAfterStrategy({
+    selectedMode: mode,
+    explicitModeProvided: modeFlagProvided,
+    recommendedMode: strategyResult.recommendedMode,
+  });
+
   const readingPipeline = await buildReadingPipeline({
     documentContent: document.content,
     sourceLabel: document.source,
     noBsOption,
     summaryOption,
     translateOption,
-    mode,
+    mode: effectiveMode,
   });
 
   const sourceWords = readingPipeline.sourceWords;
@@ -417,7 +448,7 @@ async function main() {
           initialWpm={wpm}
           sourceLabel={sourceLabel}
           textScale={textScale}
-          initialMode={mode}
+          initialMode={effectiveMode}
         />,
         {
           stdin,
@@ -431,6 +462,10 @@ async function main() {
 }
 
 main().catch((error: unknown) => {
+  if (error instanceof UserCancelledError) {
+    process.exit(130);
+  }
+
   const message = error instanceof Error ? error.message : String(error);
   const safeMessage = redactSecrets(
     message,
@@ -448,6 +483,7 @@ main().catch((error: unknown) => {
     renderedMessage.includes("text-scale") ||
     renderedMessage.includes("--summary") ||
     renderedMessage.includes("--mode") ||
+    renderedMessage.includes("--strategy") ||
     renderedMessage.includes("--translate-to") ||
     renderedMessage.startsWith("Config error:")
   ) {
