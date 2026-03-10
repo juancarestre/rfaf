@@ -13,6 +13,8 @@ Use this checklist before publishing rfaf compiled binaries.
 - [ ] Run `bun run release:checksums --dir dist/bin`.
 - [ ] Confirm `dist/bin/SHA256SUMS` exists and includes every artifact.
 - [ ] Confirm `dist/bin/release-manifest.json` artifact count matches actual files.
+- [ ] Verify artifact authenticity via signing/provenance before publish (for example, Sigstore/Cosign or GitHub attestations).
+- [ ] Confirm checksum verification instructions include both integrity and authenticity steps.
 
 ## Runtime Validation
 

@@ -37,6 +37,8 @@ This writes:
 - `dist/bin/SHA256SUMS`
 - `dist/bin/release-manifest.json`
 
+For published releases, verify artifact authenticity (signatures/attestations) in addition to checksum integrity.
+
 ## Run Binary
 
 Examples:

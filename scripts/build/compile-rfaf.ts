@@ -49,14 +49,22 @@ export function resolveCurrentTarget(
   arch: NodeJS.Architecture
 ): CompileTarget {
   if (platform === "darwin") {
-    return arch === "arm64" ? "bun-darwin-arm64" : "bun-darwin-x64";
+    if (arch === "arm64") return "bun-darwin-arm64";
+    if (arch === "x64") return "bun-darwin-x64";
+    throw new Error(`Unsupported architecture for macOS target resolution: ${arch}`);
   }
 
   if (platform === "linux") {
-    return arch === "arm64" ? "bun-linux-arm64" : "bun-linux-x64-baseline";
+    if (arch === "arm64") return "bun-linux-arm64";
+    if (arch === "x64") return "bun-linux-x64-baseline";
+    throw new Error(`Unsupported architecture for Linux target resolution: ${arch}`);
   }
 
   if (platform === "win32") {
+    if (arch !== "x64") {
+      throw new Error(`Unsupported architecture for Windows target resolution: ${arch}`);
+    }
+
     return "bun-windows-x64-baseline";
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -9,12 +9,25 @@ import {
   renderSha256Sums,
 } from "../../scripts/release/generate-checksums";
 
+function writeCompileManifest(dir: string, files: string[]): void {
+  writeFileSync(
+    join(dir, "compile-manifest.json"),
+    JSON.stringify(
+      {
+        artifacts: files.map((file) => ({ file })),
+      },
+      null,
+      2
+    )
+  );
+}
+
 describe("release checksum manifest", () => {
   it("collects deterministic sorted release artifacts", () => {
     const dir = mkdtempSync(join(tmpdir(), "rfaf-checksum-collect-"));
     writeFileSync(join(dir, "b-artifact"), "bbb");
     writeFileSync(join(dir, "a-artifact"), "aaa");
-    writeFileSync(join(dir, "release-manifest.json"), "{}");
+    writeCompileManifest(dir, ["b-artifact", "a-artifact"]);
 
     const artifacts = collectReleaseArtifacts(dir);
     expect(artifacts.map((item) => item.file)).toEqual(["a-artifact", "b-artifact"]);
@@ -55,6 +68,7 @@ describe("release checksum manifest", () => {
     const dir = mkdtempSync(join(tmpdir(), "rfaf-checksum-write-"));
     writeFileSync(join(dir, "rfaf-a"), "artifact A");
     writeFileSync(join(dir, "rfaf-b"), "artifact B");
+    writeCompileManifest(dir, ["rfaf-a", "rfaf-b"]);
 
     const manifest = generateReleaseChecksums(dir);
     const sums = readFileSync(join(dir, "SHA256SUMS"), "utf8");
@@ -66,5 +80,40 @@ describe("release checksum manifest", () => {
     expect(parsedManifest.artifactCount).toBe(2);
     expect(sums).toContain("rfaf-a");
     expect(sums).toContain("rfaf-b");
+  });
+
+  it("fails when unexpected files are present", () => {
+    const dir = mkdtempSync(join(tmpdir(), "rfaf-checksum-unexpected-"));
+    writeFileSync(join(dir, "rfaf-a"), "artifact A");
+    writeFileSync(join(dir, "rogue-file"), "bad");
+    writeCompileManifest(dir, ["rfaf-a"]);
+
+    expect(() => collectReleaseArtifacts(dir)).toThrow("Unexpected artifact entry");
+  });
+
+  it("fails when compile manifest has no artifacts", () => {
+    const dir = mkdtempSync(join(tmpdir(), "rfaf-checksum-empty-"));
+    writeCompileManifest(dir, []);
+
+    expect(() => collectReleaseArtifacts(dir)).toThrow(
+      "compile-manifest.json must include at least one artifact"
+    );
+  });
+
+  it("rejects symlink artifacts", () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    const dir = mkdtempSync(join(tmpdir(), "rfaf-checksum-symlink-"));
+    const targetDir = mkdtempSync(join(tmpdir(), "rfaf-checksum-target-"));
+    const targetFile = join(targetDir, "target");
+    writeFileSync(targetFile, "artifact A");
+    symlinkSync(targetFile, join(dir, "rfaf-a"));
+    writeCompileManifest(dir, ["rfaf-a"]);
+
+    expect(() => collectReleaseArtifacts(dir)).toThrow(
+      "Symlink artifacts are not allowed for release checksums"
+    );
   });
 });

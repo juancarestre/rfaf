@@ -1,6 +1,11 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  buildCompileArgs,
+  resolveCurrentTarget,
+  type CompileTarget,
+} from "../../scripts/build/compile-rfaf";
 
 export interface CliRunResult {
   exitCode: number;
@@ -9,22 +14,6 @@ export interface CliRunResult {
 }
 
 let compiledBinaryPath: string | null = null;
-
-function resolveCompileTarget(): string {
-  if (process.platform === "darwin") {
-    return process.arch === "arm64" ? "bun-darwin-arm64" : "bun-darwin-x64";
-  }
-
-  if (process.platform === "linux") {
-    return process.arch === "arm64" ? "bun-linux-arm64" : "bun-linux-x64-baseline";
-  }
-
-  if (process.platform === "win32") {
-    return "bun-windows-x64-baseline";
-  }
-
-  throw new Error(`Unsupported platform for compile contract tests: ${process.platform}`);
-}
 
 function decode(output: ArrayBufferView | null): string {
   if (!output) return "";
@@ -55,29 +44,20 @@ export function compileTestBinary(): string {
 
   const outDir = mkdtempSync(join(tmpdir(), "rfaf-compile-contract-"));
   const outFile = join(outDir, process.platform === "win32" ? "rfaf.exe" : "rfaf");
-  const compileTarget = resolveCompileTarget();
-
-  const result = Bun.spawnSync(
-    [
-      "bun",
-      "build",
-      "src/cli/index.tsx",
-      "--compile",
-      `--target=${compileTarget}`,
-      "--outfile",
-      outFile,
-      "--no-compile-autoload-dotenv",
-      "--no-compile-autoload-bunfig",
-    ],
-    {
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-      },
-      stderr: "pipe",
-      stdout: "pipe",
-    }
+  const compileTarget: CompileTarget = resolveCurrentTarget(
+    process.platform,
+    process.arch as NodeJS.Architecture
   );
+  const compileArgs = buildCompileArgs("src/cli/index.tsx", compileTarget, outFile);
+
+  const result = Bun.spawnSync(["bun", ...compileArgs], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+    },
+    stderr: "pipe",
+    stdout: "pipe",
+  });
 
   if (result.exitCode !== 0) {
     throw new Error(`Compile failed:\n${decode(result.stderr)}`);

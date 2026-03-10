@@ -60,4 +60,16 @@ describe("compile artifact layout", () => {
     expect(resolveCurrentTarget("linux", "x64")).toBe("bun-linux-x64-baseline");
     expect(resolveCurrentTarget("win32", "x64")).toBe("bun-windows-x64-baseline");
   });
+
+  it("fails fast for unsupported architectures", () => {
+    expect(() => resolveCurrentTarget("darwin", "ia32" as NodeJS.Architecture)).toThrow(
+      "Unsupported architecture for macOS target resolution"
+    );
+    expect(() => resolveCurrentTarget("linux", "arm" as NodeJS.Architecture)).toThrow(
+      "Unsupported architecture for Linux target resolution"
+    );
+    expect(() => resolveCurrentTarget("win32", "arm64" as NodeJS.Architecture)).toThrow(
+      "Unsupported architecture for Windows target resolution"
+    );
+  });
 });
