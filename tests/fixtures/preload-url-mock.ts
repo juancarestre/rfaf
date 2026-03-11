@@ -3,13 +3,17 @@ export {};
 const ARTICLE_URL = "https://example.com/article";
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 
-const scenario = process.env.RFAF_URL_MOCK_SCENARIO ?? "success";
-const summaryText =
-  process.env.RFAF_URL_MOCK_SUMMARY_TEXT ??
-  "Summary output text that is deterministic for CLI contract tests.";
-
 const articleParagraph =
   "The quick brown fox jumps over the lazy dog while this paragraph gives readability enough meaningful content to extract for speed reading tests.";
+
+const scenario = process.env.RFAF_URL_MOCK_SCENARIO ?? "success";
+const defaultSummaryText = `${articleParagraph} ${articleParagraph}`
+  .split(/\s+/)
+  .filter(Boolean)
+  .slice(0, 36)
+  .join(" ");
+const summaryText =
+  process.env.RFAF_URL_MOCK_SUMMARY_TEXT ?? defaultSummaryText;
 
 const originalFetch = fetch;
 
