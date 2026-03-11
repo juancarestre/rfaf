@@ -75,4 +75,37 @@ describe("no-bs long-input boundary", () => {
     expect(calls).toBeGreaterThan(1);
     expect(cleaned.length).toBeGreaterThan(0);
   });
+
+  it("enforces a global timeout budget across chunked calls", async () => {
+    const n = DEFAULT_LONG_INPUT_TRIGGER_BYTES;
+    const source = makeBytesAtLeast(n + 500);
+    let calls = 0;
+    let simulatedNow = 0;
+    const originalNow = Date.now;
+    Date.now = () => simulatedNow;
+
+    try {
+      await expect(
+        noBsTextWithGenerator(
+          {
+            provider: "openai",
+            model: "gpt-4o-mini",
+            apiKey: "test",
+            input: source,
+            timeoutMs: 100,
+            maxRetries: 0,
+          },
+          async ({ prompt }) => {
+            calls += 1;
+            simulatedNow += 80;
+            return { object: { cleaned_text: extractSource(prompt) } };
+          }
+        )
+      ).rejects.toThrow("[timeout]");
+
+      expect(calls).toBeGreaterThan(1);
+    } finally {
+      Date.now = originalNow;
+    }
+  });
 });

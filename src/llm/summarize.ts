@@ -383,15 +383,31 @@ export async function summarizeTextWithGenerator(
   generate: StructuredGenerator
 ): Promise<string> {
   const model = createModel(input.provider, input.model, input.apiKey);
+  const timeoutDeadlineMs = Date.now() + input.timeoutMs;
 
-  const runSinglePass = async (sourceText: string): Promise<string> => {
+  const runSinglePass = async (
+    sourceText: string,
+    enforceLengthContract: boolean
+  ): Promise<string> => {
     const prompt = buildSummaryPrompt(sourceText, input.preset);
     let attempt = 0;
     let lastError: unknown;
 
     while (attempt <= input.maxRetries) {
+      const remainingTimeoutMs = timeoutDeadlineMs - Date.now();
+      if (remainingTimeoutMs <= 0) {
+        lastError = new SummarizeRuntimeError(
+          "Summarization failed [timeout]: request timed out.",
+          "timeout"
+        );
+        break;
+      }
+
       try {
-        const { signal, dispose } = mergedAbortSignal(input.timeoutMs, input.signal);
+        const { signal, dispose } = mergedAbortSignal(
+          Math.max(1, remainingTimeoutMs),
+          input.signal
+        );
         const result = await generate({
           model,
           schema: SummaryResponseSchema,
@@ -414,13 +430,22 @@ export async function summarizeTextWithGenerator(
           );
         }
 
-        const sourceWordCount = countWords(sourceText);
-        const summaryWordCount = countWords(normalized);
-        if (violatesSummaryLengthContract(sourceWordCount, summaryWordCount, input.preset)) {
-          const contract = resolveSummaryLengthContract(sourceWordCount, input.preset);
+        if (enforceLengthContract) {
+          const sourceWordCount = countWords(sourceText);
+          const summaryWordCount = countWords(normalized);
+          if (violatesSummaryLengthContract(sourceWordCount, summaryWordCount, input.preset)) {
+            const contract = resolveSummaryLengthContract(sourceWordCount, input.preset);
+            throw new SummarizeRuntimeError(
+              `Summarization failed [schema]: ${SUMMARY_LENGTH_FAILURE_REASON}; expected ${contract.minimumWords}-${contract.maximumWords} words for preset ${input.preset}, got ${summaryWordCount}.`,
+              "schema"
+            );
+          }
+        }
+
+        if (Date.now() > timeoutDeadlineMs) {
           throw new SummarizeRuntimeError(
-            `Summarization failed [schema]: ${SUMMARY_LENGTH_FAILURE_REASON}; expected ${contract.minimumWords}-${contract.maximumWords} words for preset ${input.preset}, got ${summaryWordCount}.`,
-            "schema"
+            "Summarization failed [timeout]: request timed out.",
+            "timeout"
           );
         }
 
@@ -444,17 +469,24 @@ export async function summarizeTextWithGenerator(
   };
 
   if (!shouldUseLongInputChunking(input.input)) {
-    return runSinglePass(input.input);
+    return runSinglePass(input.input, true);
   }
 
-  const chunks = splitIntoLongInputChunks(input.input);
+  let chunks: string[];
+  try {
+    chunks = splitIntoLongInputChunks(input.input);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new SummarizeRuntimeError(`Summarization failed [runtime]: ${message}`, "runtime");
+  }
+
   if (chunks.length <= 1) {
-    return runSinglePass(input.input);
+    return runSinglePass(input.input, true);
   }
 
   const chunkSummaries: string[] = [];
   for (const chunk of chunks) {
-    chunkSummaries.push(await runSinglePass(chunk));
+    chunkSummaries.push(await runSinglePass(chunk, false));
   }
 
   const merged = mergeLongInputChunks(chunkSummaries);

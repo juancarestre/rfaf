@@ -431,6 +431,7 @@ export async function noBsTextWithGenerator(
   generate: NoBsGenerator
 ): Promise<string> {
   const model = createModel(input.provider, input.model, input.apiKey);
+  const timeoutDeadlineMs = Date.now() + input.timeoutMs;
 
   const runSinglePass = async (sourceText: string): Promise<string> => {
     const prompt = buildNoBsPrompt(sourceText);
@@ -439,8 +440,17 @@ export async function noBsTextWithGenerator(
     let lastError: unknown;
 
     while (attempt <= input.maxRetries) {
+      const remainingTimeoutMs = timeoutDeadlineMs - Date.now();
+      if (remainingTimeoutMs <= 0) {
+        lastError = new NoBsRuntimeError("No-BS failed [timeout]: request timed out.", "timeout");
+        break;
+      }
+
       try {
-        const { signal, dispose } = mergedAbortSignal(input.timeoutMs, input.signal);
+        const { signal, dispose } = mergedAbortSignal(
+          Math.max(1, remainingTimeoutMs),
+          input.signal
+        );
         const result = await generate({
           model,
           schema: NoBsResponseSchema,
@@ -474,6 +484,10 @@ export async function noBsTextWithGenerator(
           );
         }
 
+        if (Date.now() > timeoutDeadlineMs) {
+          throw new NoBsRuntimeError("No-BS failed [timeout]: request timed out.", "timeout");
+        }
+
         assertInputWithinLimit(Buffer.byteLength(normalized, "utf8"), MAX_NO_BS_BYTES);
         return normalized;
       } catch (error: unknown) {
@@ -494,7 +508,14 @@ export async function noBsTextWithGenerator(
     return runSinglePass(input.input);
   }
 
-  const chunks = splitIntoLongInputChunks(input.input);
+  let chunks: string[];
+  try {
+    chunks = splitIntoLongInputChunks(input.input);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new NoBsRuntimeError(`No-BS failed [runtime]: ${message}`, "runtime");
+  }
+
   if (chunks.length <= 1) {
     return runSinglePass(input.input);
   }
