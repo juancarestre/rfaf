@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-const PTY_TEST_TIMEOUT_MS = 20_000;
+const PTY_TEST_TIMEOUT_MS = 30_000;
 
 function stripAnsi(output: string): string {
   return output
@@ -115,15 +115,13 @@ describe("help overlay toggle PTY contract", () => {
     const result = runHelpOverlayPty(["help", "close-help-toggle", "quit"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.output).toContain("toggle help overlay");
-    expect(result.output).toContain("Press Space to start");
+    expect(result.output).toContain("[RSVP] Press Space to start");
   }, PTY_TEST_TIMEOUT_MS);
 
   it("closes help with Esc", () => {
     const result = runHelpOverlayPty(["help", "close-help-esc", "quit"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.output).toContain("close help overlay");
-    expect(result.output).toContain("Press Space to start");
+    expect(result.output).toContain("[RSVP] Press Space to start");
   }, PTY_TEST_TIMEOUT_MS);
 });

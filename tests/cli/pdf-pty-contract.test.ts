@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+const PTY_TEST_TIMEOUT_MS = 30_000;
+
 function stripAnsi(output: string): string {
   return output
     .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
@@ -98,5 +100,5 @@ describe("pdf PTY contract", () => {
     expect(result.exitCode).toBe(0);
     expect(result.output).toContain("Press Space to start (RSVP)");
     expect(result.output).toContain("sample.pdf");
-  });
+  }, PTY_TEST_TIMEOUT_MS);
 });

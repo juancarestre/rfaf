@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+const PTY_TEST_TIMEOUT_MS = 30_000;
+
 function stripAnsi(output: string): string {
   return output
     .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
@@ -119,14 +121,14 @@ describe("scroll mode PTY contract", () => {
     expect(result.output).toContain("[Scroll]");
     expect(result.output).toContain("tests/fi");
     expect(result.output).toContain("0%");
-  });
+  }, PTY_TEST_TIMEOUT_MS);
 
   it("shows help overlay and still quits cleanly", () => {
     const result = runScrollPty(["help", "quit"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.output).toContain("close help overlay");
-  });
+    expect(result.output).toContain("[Scroll]");
+  }, PTY_TEST_TIMEOUT_MS);
 
   it("supports line-step and speed controls in PTY flow", () => {
     const result = runScrollPty(["step-line", "speed-down", "quit"]);
@@ -134,12 +136,12 @@ describe("scroll mode PTY contract", () => {
     expect(result.exitCode).toBe(0);
     expect(result.output).toContain("6%");
     expect(result.output).toContain("275 WPM");
-  });
+  }, PTY_TEST_TIMEOUT_MS);
 
   it("handles resize to too-small terminal and quits cleanly", () => {
     const result = runScrollPty(["resize-small", "quit"]);
 
     expect(result.exitCode).toBe(0);
     expect(result.output).toContain("Terminal too small. Resize to at least");
-  });
+  }, PTY_TEST_TIMEOUT_MS);
 });

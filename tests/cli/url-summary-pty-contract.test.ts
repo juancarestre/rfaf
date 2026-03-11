@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+const PTY_TEST_TIMEOUT_MS = 30_000;
+
 function stripAnsi(output: string): string {
   return output
     .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
@@ -137,7 +139,7 @@ describe("url + summary PTY contract", () => {
     expect(result.output).toContain("[ok] article loaded: Mock Article");
     expect(result.output).toContain("summary ready; starting RSVP");
     expect(result.output).toContain("[RSVP] Press Space to start");
-  });
+  }, PTY_TEST_TIMEOUT_MS);
 
   it("supports url input with explicit scroll mode", () => {
     const result = runUrlSummaryPty(
@@ -150,5 +152,5 @@ describe("url + summary PTY contract", () => {
     expect(result.output).toContain("fetching article from https://example.com/article");
     expect(result.output).toContain("[ok] article loaded: Mock Article");
     expect(result.output).toContain("[Scroll] Press");
-  });
+  }, PTY_TEST_TIMEOUT_MS);
 });

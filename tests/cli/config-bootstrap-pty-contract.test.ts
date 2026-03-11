@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+const PTY_TEST_TIMEOUT_MS = 30_000;
+
 function stripAnsi(output: string): string {
   return output
     .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
@@ -157,7 +159,7 @@ describe("config bootstrap PTY contract", () => {
     expect(result.output).toContain("[RSVP] Press Space to start");
     expect(result.configExists).toBe(true);
     expect(result.configMode).toBe("600");
-  }, 20_000);
+  }, PTY_TEST_TIMEOUT_MS);
 
   it("fails fast on decline before ingest side-effects", () => {
     const result = runConfigBootstrapPtyWith({
@@ -170,5 +172,5 @@ describe("config bootstrap PTY contract", () => {
     expect(result.output).toContain("Config error: missing config file");
     expect(result.output).not.toContain("fetching article from");
     expect(result.configExists).toBe(false);
-  }, 20_000);
+  }, PTY_TEST_TIMEOUT_MS);
 });

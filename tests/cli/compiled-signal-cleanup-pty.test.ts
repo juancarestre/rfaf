@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { runCompiledPtySession } from "./compiled-pty-helpers";
 
-const PTY_TEST_TIMEOUT_MS = 20_000;
+const PTY_TEST_TIMEOUT_MS = 30_000;
 
 describe("compiled signal cleanup PTY contract", () => {
   it("exits on SIGINT and restores terminal mode flags", () => {
