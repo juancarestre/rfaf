@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests
+        run: bun test
+
+      - name: Run typecheck
+        run: bun x tsc --noEmit
+
+      - name: Build compiled binaries
+        run: bun run build:compile
+
+      - name: Generate checksums and release manifest
+        run: bun run release:checksums --dir dist/bin
+
+      - name: Resolve release metadata
+        id: release_meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          existing_tag=$(gh release list --limit 100 --json tagName,targetCommitish --jq ".[] | select(.targetCommitish==\"$GITHUB_SHA\") | .tagName" | head -n1 || true)
+          if [[ -n "${existing_tag}" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "tag=${existing_tag}" >> "$GITHUB_OUTPUT"
+            echo "Release already exists for this commit: ${existing_tag}"
+            exit 0
+          fi
+
+          latest_tag=$(gh release list --limit 1 --json tagName --jq '.[0].tagName // ""' || true)
+          if [[ -z "${latest_tag}" ]]; then
+            next_tag="v0.0.1"
+          else
+            clean_tag="${latest_tag#v}"
+            if [[ ! "${clean_tag}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Latest release tag is not semver: ${latest_tag}" >&2
+              exit 1
+            fi
+
+            IFS='.' read -r major minor patch <<< "${clean_tag}"
+            next_patch=$((patch + 1))
+            next_tag="v${major}.${minor}.${next_patch}"
+          fi
+
+          if gh release view "${next_tag}" >/dev/null 2>&1; then
+            echo "Release tag already exists: ${next_tag}" >&2
+            exit 1
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "tag=${next_tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Create draft release
+        if: steps.release_meta.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.release_meta.outputs.tag }}"
+          gh release create "${TAG}" --target "$GITHUB_SHA" --title "rfaf ${TAG}" --notes "Automated release for ${GITHUB_SHA}." --draft
+
+      - name: Upload release assets
+        if: steps.release_meta.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.release_meta.outputs.tag }}"
+          gh release upload "${TAG}" dist/bin/*
+
+      - name: Publish release
+        if: steps.release_meta.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.release_meta.outputs.tag }}"
+          gh release edit "${TAG}" --draft=false
