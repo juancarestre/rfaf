@@ -8,6 +8,11 @@ import type { SummaryPreset } from "../cli/summary-option";
 import type { LLMProvider } from "../config/llm-config";
 import { countWords } from "../ingest/metrics";
 import { assertInputWithinLimit } from "../ingest/constants";
+import {
+  shouldUseLongInputChunking,
+  splitIntoLongInputChunks,
+} from "./long-input-chunking";
+import { mergeLongInputChunks } from "./long-input-merge";
 
 export const MAX_SUMMARY_BYTES = 512 * 1024;
 
@@ -378,65 +383,136 @@ export async function summarizeTextWithGenerator(
   generate: StructuredGenerator
 ): Promise<string> {
   const model = createModel(input.provider, input.model, input.apiKey);
-  const prompt = buildSummaryPrompt(input.input, input.preset);
+  const timeoutDeadlineMs = Date.now() + input.timeoutMs;
 
-  let attempt = 0;
-  let lastError: unknown;
+  const runSinglePass = async (
+    sourceText: string,
+    enforceLengthContract: boolean
+  ): Promise<string> => {
+    const prompt = buildSummaryPrompt(sourceText, input.preset);
+    let attempt = 0;
+    let lastError: unknown;
 
-  while (attempt <= input.maxRetries) {
-    try {
-      const { signal, dispose } = mergedAbortSignal(input.timeoutMs, input.signal);
-      const result = await generate({
-        model,
-        schema: SummaryResponseSchema,
-        prompt,
-        abortSignal: signal,
-      }).finally(dispose);
-
-      const normalized = normalizeSummaryText(result.object.summary);
-      if (!normalized) {
-        throw new SummarizeRuntimeError(
-          "Summarization failed [schema]: summary text is empty.",
-          "schema"
+    while (attempt <= input.maxRetries) {
+      const remainingTimeoutMs = timeoutDeadlineMs - Date.now();
+      if (remainingTimeoutMs <= 0) {
+        lastError = new SummarizeRuntimeError(
+          "Summarization failed [timeout]: request timed out.",
+          "timeout"
         );
-      }
-
-      if (violatesLanguagePreservation(input.input, normalized)) {
-        throw new SummarizeRuntimeError(
-          "Summarization failed [schema]: language preservation check failed; summary language differs from source text.",
-          "schema"
-        );
-      }
-
-      const sourceWordCount = countWords(input.input);
-      const summaryWordCount = countWords(normalized);
-      if (violatesSummaryLengthContract(sourceWordCount, summaryWordCount, input.preset)) {
-        const contract = resolveSummaryLengthContract(sourceWordCount, input.preset);
-        throw new SummarizeRuntimeError(
-          `Summarization failed [schema]: ${SUMMARY_LENGTH_FAILURE_REASON}; expected ${contract.minimumWords}-${contract.maximumWords} words for preset ${input.preset}, got ${summaryWordCount}.`,
-          "schema"
-        );
-      }
-
-      assertInputWithinLimit(Buffer.byteLength(normalized, "utf8"), MAX_SUMMARY_BYTES);
-
-      return normalized;
-    } catch (error: unknown) {
-      lastError = error;
-      if (
-        attempt >= input.maxRetries ||
-        (!isTransientRuntimeError(error) && !isLanguagePreservationFailure(error))
-      ) {
         break;
       }
 
-      await sleep(getRetryDelayMs(attempt));
+      try {
+        const { signal, dispose } = mergedAbortSignal(
+          Math.max(1, remainingTimeoutMs),
+          input.signal
+        );
+        const result = await generate({
+          model,
+          schema: SummaryResponseSchema,
+          prompt,
+          abortSignal: signal,
+        }).finally(dispose);
 
-      attempt += 1;
+        const normalized = normalizeSummaryText(result.object.summary);
+        if (!normalized) {
+          throw new SummarizeRuntimeError(
+            "Summarization failed [schema]: summary text is empty.",
+            "schema"
+          );
+        }
+
+        if (violatesLanguagePreservation(sourceText, normalized)) {
+          throw new SummarizeRuntimeError(
+            "Summarization failed [schema]: language preservation check failed; summary language differs from source text.",
+            "schema"
+          );
+        }
+
+        if (enforceLengthContract) {
+          const sourceWordCount = countWords(sourceText);
+          const summaryWordCount = countWords(normalized);
+          if (violatesSummaryLengthContract(sourceWordCount, summaryWordCount, input.preset)) {
+            const contract = resolveSummaryLengthContract(sourceWordCount, input.preset);
+            throw new SummarizeRuntimeError(
+              `Summarization failed [schema]: ${SUMMARY_LENGTH_FAILURE_REASON}; expected ${contract.minimumWords}-${contract.maximumWords} words for preset ${input.preset}, got ${summaryWordCount}.`,
+              "schema"
+            );
+          }
+        }
+
+        if (Date.now() > timeoutDeadlineMs) {
+          throw new SummarizeRuntimeError(
+            "Summarization failed [timeout]: request timed out.",
+            "timeout"
+          );
+        }
+
+        assertInputWithinLimit(Buffer.byteLength(normalized, "utf8"), MAX_SUMMARY_BYTES);
+        return normalized;
+      } catch (error: unknown) {
+        lastError = error;
+        if (
+          attempt >= input.maxRetries ||
+          (!isTransientRuntimeError(error) && !isLanguagePreservationFailure(error))
+        ) {
+          break;
+        }
+
+        await sleep(getRetryDelayMs(attempt));
+        attempt += 1;
+      }
     }
+
+    throw classifyRuntimeError(lastError);
+  };
+
+  if (!shouldUseLongInputChunking(input.input)) {
+    return runSinglePass(input.input, true);
   }
 
-  throw classifyRuntimeError(lastError);
+  let chunks: string[];
+  try {
+    chunks = splitIntoLongInputChunks(input.input);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new SummarizeRuntimeError(`Summarization failed [runtime]: ${message}`, "runtime");
+  }
+
+  if (chunks.length <= 1) {
+    return runSinglePass(input.input, true);
+  }
+
+  const chunkSummaries: string[] = [];
+  for (const chunk of chunks) {
+    chunkSummaries.push(await runSinglePass(chunk, false));
+  }
+
+  const merged = mergeLongInputChunks(chunkSummaries);
+  if (!merged) {
+    throw new SummarizeRuntimeError("Summarization failed [schema]: summary text is empty.", "schema");
+  }
+
+  if (violatesLanguagePreservation(input.input, merged)) {
+    throw new SummarizeRuntimeError(
+      "Summarization failed [schema]: language preservation check failed; summary language differs from source text.",
+      "schema"
+    );
+  }
+
+  const sourceWordCount = countWords(input.input);
+  const summaryWordCount = countWords(merged);
+  if (violatesSummaryLengthContract(sourceWordCount, summaryWordCount, input.preset)) {
+    const contract = resolveSummaryLengthContract(sourceWordCount, input.preset);
+    throw new SummarizeRuntimeError(
+      `Summarization failed [schema]: ${SUMMARY_LENGTH_FAILURE_REASON}; expected ${contract.minimumWords}-${contract.maximumWords} words for preset ${input.preset}, got ${summaryWordCount}.`,
+      "schema"
+    );
+  }
+
+  assertInputWithinLimit(Buffer.byteLength(merged, "utf8"), MAX_SUMMARY_BYTES);
+  return merged;
 }
 
 export async function summarizeText(input: SummarizeInput): Promise<string> {
