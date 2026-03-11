@@ -16,6 +16,44 @@ interface WordDisplayProps {
 }
 
 const MAX_EXPANDED_RENDER_CHARS = 256;
+const WHITESPACE_PATTERN = /\s/u;
+
+function isVisiblePivotCharacter(value: string): boolean {
+  return value.length > 0 && !WHITESPACE_PATTERN.test(value);
+}
+
+function resolvePivotIndex(displayWord: string): number | null {
+  if (displayWord.length === 0) {
+    return null;
+  }
+
+  const rawOrp = Math.min(getORPIndex(displayWord.length), displayWord.length - 1);
+  const rawPivot = displayWord[rawOrp] ?? "";
+
+  if (isVisiblePivotCharacter(rawPivot)) {
+    return rawOrp;
+  }
+
+  for (let distance = 1; distance < displayWord.length; distance++) {
+    const rightIndex = rawOrp + distance;
+    if (rightIndex < displayWord.length) {
+      const rightCandidate = displayWord[rightIndex] ?? "";
+      if (isVisiblePivotCharacter(rightCandidate)) {
+        return rightIndex;
+      }
+    }
+
+    const leftIndex = rawOrp - distance;
+    if (leftIndex >= 0) {
+      const leftCandidate = displayWord[leftIndex] ?? "";
+      if (isVisiblePivotCharacter(leftCandidate)) {
+        return leftIndex;
+      }
+    }
+  }
+
+  return null;
+}
 
 function spreadUppercase(value: string): string {
   const upper = value.toUpperCase();
@@ -75,10 +113,19 @@ export function getWordDisplayLayout(
     renderMode === "expanded" ? truncateExpandedRenderWord(safeWord) : safeWord;
   const prefixedWord = emphasizePrefixAlphaNumeric(baseDisplayWord, bionicPrefixLength);
   const displayWord = keyPhraseMatch ? prefixedWord.toUpperCase() : prefixedWord;
-  const rawOrp = getORPIndex(displayWord.length);
-  const orp = displayWord.length > 0 ? Math.min(rawOrp, displayWord.length - 1) : 0;
+  const orp = resolvePivotIndex(displayWord);
 
   if (renderMode === "expanded") {
+    if (orp === null) {
+      const before = spreadUppercase(displayWord);
+      return {
+        before,
+        pivot: "",
+        after: "",
+        leftPadding: " ".repeat(Math.max(0, pivotColumn - before.length)),
+      };
+    }
+
     const beforeExpanded = spreadUppercase(displayWord.slice(0, orp));
     const pivotExpanded = (displayWord[orp] ?? "").toUpperCase();
     const afterExpanded = spreadUppercase(displayWord.slice(orp + 1));
@@ -95,10 +142,10 @@ export function getWordDisplayLayout(
   }
 
   return {
-    before: displayWord.slice(0, orp),
-    pivot: displayWord[orp] ?? "",
-    after: displayWord.slice(orp + 1),
-    leftPadding: " ".repeat(Math.max(0, pivotColumn - orp)),
+    before: orp === null ? displayWord : displayWord.slice(0, orp),
+    pivot: orp === null ? "" : displayWord[orp] ?? "",
+    after: orp === null ? "" : displayWord.slice(orp + 1),
+    leftPadding: " ".repeat(Math.max(0, pivotColumn - (orp ?? displayWord.length))),
   };
 }
 

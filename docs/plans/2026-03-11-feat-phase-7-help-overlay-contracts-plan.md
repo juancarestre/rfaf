@@ -1,7 +1,7 @@
 ---
 title: "feat: Phase 7 Help Overlay Contracts"
 type: feat
-status: active
+status: completed
 date: 2026-03-11
 origin: docs/brainstorms/2026-03-04-rfaf-mvp-scope-brainstorm.md
 ---
@@ -207,23 +207,23 @@ No scope expansion during cleanup.
 
 ### Functional Requirements
 
-- [ ] Chunked-mode ORP highlight never paints whitespace when a visible character exists (see brainstorm: `docs/brainstorms/2026-03-04-rfaf-mvp-scope-brainstorm.md`).
-- [ ] Fallback behavior for ORP selection is deterministic across tie and boundary cases.
-- [ ] Chunks containing no visible character render safely without crash.
-- [ ] `--help` output is split into clear, labeled sections (see brainstorm: `docs/brainstorms/2026-03-04-rfaf-mvp-scope-brainstorm.md`).
-- [ ] `--help` includes a dedicated AI Processing section with canonical AI flags.
+- [x] Chunked-mode ORP highlight never paints whitespace when a visible character exists (see brainstorm: `docs/brainstorms/2026-03-04-rfaf-mvp-scope-brainstorm.md`).
+- [x] Fallback behavior for ORP selection is deterministic across tie and boundary cases.
+- [x] Chunks containing no visible character render safely without crash.
+- [x] `--help` output is split into clear, labeled sections (see brainstorm: `docs/brainstorms/2026-03-04-rfaf-mvp-scope-brainstorm.md`).
+- [x] `--help` includes a dedicated AI Processing section with canonical AI flags.
 
 ### Contract and Reliability Requirements
 
-- [ ] Source-run and compiled `--help` are semantically equivalent in section set, flag membership, and descriptions.
-- [ ] `--help` returns exit code `0` and writes no stderr output for source and compiled runs.
-- [ ] Existing runtime controls/help examples remain present after sectioning.
+- [x] Source-run and compiled `--help` are semantically equivalent in section set, flag membership, and descriptions.
+- [x] `--help` returns exit code `0` and writes no stderr output for source and compiled runs.
+- [x] Existing runtime controls/help examples remain present after sectioning.
 
 ### Quality Gates (TDD)
 
-- [ ] Each implementation phase starts with failing tests (red -> green).
-- [ ] Unit + CLI contract suites pass for both ORP and help changes.
-- [ ] `bun test` and `bun x tsc --noEmit` pass before completion.
+- [x] Each implementation phase starts with failing tests (red -> green).
+- [x] Unit + CLI contract suites pass for both ORP and help changes.
+- [x] `bun test` and `bun x tsc --noEmit` pass before completion.
 
 ## Success Metrics
 
