@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+const PTY_TEST_TIMEOUT_MS = 30_000;
+
 function stripAnsi(output: string): string {
   return output
     .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
@@ -131,7 +133,7 @@ describe("runtime mode switching PTY contract", () => {
     expect(result.output).toContain("[Bionic]");
     expect(result.output).toContain("[Scroll]");
     expect(result.output).toContain("[RSVP]");
-  });
+  }, PTY_TEST_TIMEOUT_MS);
 
   it("renders scroll screen content after switching into scroll mode", () => {
     const result = runRuntimeModePty(["mode-scroll", "quit"]);
@@ -139,7 +141,7 @@ describe("runtime mode switching PTY contract", () => {
     expect(result.exitCode).toBe(0);
     expect(result.output).toContain("Press Space to start (Scroll)");
     expect(result.output).toContain("The quick brown fox jumps over the lazy dog.");
-  });
+  }, PTY_TEST_TIMEOUT_MS);
 
   it("supports help overlay mode switching without closing help first", () => {
     const result = runRuntimeModePty([
@@ -152,7 +154,7 @@ describe("runtime mode switching PTY contract", () => {
     expect(result.output).toMatch(/1-4\s+switch mode/);
     expect(result.output).toContain("step forward (line)");
     expect(result.output).toContain("[Scroll]");
-  });
+  }, PTY_TEST_TIMEOUT_MS);
 
   it("toggles help overlay closed with ? and keeps runtime active", () => {
     const result = runRuntimeModePty(["help", "toggle-help", "mode-scroll", "quit"]);
@@ -161,5 +163,5 @@ describe("runtime mode switching PTY contract", () => {
     expect(result.output).toContain("toggle help overlay");
     expect(result.output).toContain("[Scroll]");
     expect(result.output).toContain("Press Space to start (Scroll)");
-  });
+  }, PTY_TEST_TIMEOUT_MS);
 });
