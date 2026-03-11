@@ -9,10 +9,10 @@
 
 llm:
   # One of: openai, anthropic, google
-  provider: openai
+  provider: google
 
   # Model name for the selected provider
-  model: gpt-4o-mini
+  model: gemini-3.1-flash-lite-preview
 
   # Optional: direct key (prefer env vars in real usage)
   # api_key: replace-me
@@ -22,7 +22,7 @@ llm:
   # - openai    -> OPENAI_API_KEY
   # - anthropic -> ANTHROPIC_API_KEY
   # - google    -> GOOGLE_GENERATIVE_AI_API_KEY
-  api_key_env: OPENAI_API_KEY
+  api_key_env: GOOGLE_GENERATIVE_AI_API_KEY
 
 display:
   # Optional; reserved for UI defaults
