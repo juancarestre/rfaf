@@ -18,8 +18,20 @@ describe("WordDisplay ORP whitespace contract", () => {
   it("renders safely when no visible characters are available", () => {
     const layout = getWordDisplayLayout(" \t ", 12);
 
+    expect(layout.before).toBe(" \t ");
     expect(layout.pivot).toBe("");
-    expect(layout.before + layout.after).toContain(" ");
+    expect(layout.after).toBe("");
+    expect(layout.leftPadding.length).toBe(9);
+    expect(layout.leftPadding.length + layout.before.length).toBe(12);
+  });
+
+  it("uses deterministic no-visible layout for empty input", () => {
+    const layout = getWordDisplayLayout("", 12);
+
+    expect(layout.before).toBe("");
+    expect(layout.pivot).toBe("");
+    expect(layout.after).toBe("");
+    expect(layout.leftPadding.length).toBe(12);
   });
 
   it("applies the same non-whitespace fallback in expanded render mode", () => {
