@@ -97,6 +97,50 @@ cat ./article.txt | bun run src/cli/index.tsx
 bun run src/cli/index.tsx --clipboard
 ```
 
+### Accepted input types
+
+`rfaf` accepts these input sources:
+
+- HTTP/HTTPS article pages (`https://...`)
+- Plain text files (`.txt` and other plaintext files)
+- Markdown files (`.md`, `.markdown`)
+- PDF files (`.pdf`)
+- EPUB files (`.epub`)
+- Piped stdin text (`cat article.txt | rfaf`)
+- System clipboard text (`--clipboard`)
+
+Input selection behavior:
+
+- URL passed as positional argument -> fetches and extracts article content.
+- File path passed as positional argument -> ingests by file type.
+- No positional input + piped stdin -> reads stdin.
+- `--clipboard` -> reads copied text from clipboard.
+
+### Usage examples per input type
+
+```bash
+# 1) HTTP/HTTPS page
+bun run src/cli/index.tsx "https://example.com/article"
+
+# 2) Plain text file
+bun run src/cli/index.tsx ./docs/article.txt
+
+# 3) Markdown file
+bun run src/cli/index.tsx ./docs/notes.md
+
+# 4) PDF file
+bun run src/cli/index.tsx ./docs/paper.pdf
+
+# 5) EPUB file
+bun run src/cli/index.tsx ./books/book.epub
+
+# 6) Piped stdin
+cat ./docs/article.txt | bun run src/cli/index.tsx
+
+# 7) Clipboard input
+bun run src/cli/index.tsx --clipboard
+```
+
 ### Common usage patterns
 
 ```bash
@@ -131,6 +175,19 @@ bun run src/cli/index.tsx history
 - `chunked`
 - `bionic`
 - `scroll`
+
+### What is RSVP and why it helps
+
+RSVP means **Rapid Serial Visual Presentation**. Instead of moving your eyes across lines, the app shows one word (or small chunk) at a fixed point in the terminal.
+
+Why this can improve reading speed:
+
+- Less eye movement (reduced saccades) means less time spent physically scanning lines.
+- Fixed focal point reduces re-acquisition time between words.
+- Consistent pacing (WPM) helps maintain focus and rhythm.
+- For many readers, this reduces regressions (unnecessary backtracking).
+
+Practical note: RSVP is best for fast first-pass reading. For dense technical material, combine lower WPM with `chunked` or `scroll` mode when you need deeper comprehension.
 
 ### Runtime controls
 
