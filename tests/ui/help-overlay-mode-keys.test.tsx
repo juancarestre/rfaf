@@ -7,20 +7,20 @@ describe("HelpOverlay mode keys", () => {
   it("shows runtime mode switching keys", () => {
     const output = renderToString(React.createElement(HelpOverlay, { mode: "rsvp" }));
 
-    expect(output).toContain("1-4        switch mode");
+    expect(output).toMatch(/1-4\s+switch mode/);
   });
 
   it("describes scroll stepping in line units", () => {
     const output = renderToString(React.createElement(HelpOverlay, { mode: "scroll" }));
 
-    expect(output).toContain("l / Right  step forward (line)");
-    expect(output).toContain("h / Left   step backward (line)");
+    expect(output).toMatch(/l \/ Right\s+step forward \(line\)/);
+    expect(output).toMatch(/h \/ Left\s+step backward \(line\)/);
   });
 
   it("describes RSVP-family stepping in word units", () => {
     const output = renderToString(React.createElement(HelpOverlay, { mode: "chunked" }));
 
-    expect(output).toContain("l / Right  step forward (chunk)");
-    expect(output).toContain("h / Left   step backward (chunk)");
+    expect(output).toMatch(/l \/ Right\s+step forward \(chunk\)/);
+    expect(output).toMatch(/h \/ Left\s+step backward \(chunk\)/);
   });
 });

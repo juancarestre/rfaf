@@ -33,6 +33,8 @@ describe("help CLI contract", () => {
     expect(result.stdout).toContain("--strategy");
     expect(result.stdout).toContain("rfaf history");
     expect(result.stdout).toContain("Runtime controls:");
-    expect(result.stdout).toContain("1-4 switch mod");
+    expect(result.stdout).toMatch(/1-4 switch\s+mode/);
+    expect(result.stdout).toMatch(/\? toggle help/);
+    expect(result.stdout).toMatch(/Esc close help/);
   });
 });

@@ -136,7 +136,7 @@ describe("url + summary PTY contract", () => {
     expect(result.output).toContain("fetching article from https://example.com/article");
     expect(result.output).toContain("[ok] article loaded: Mock Article");
     expect(result.output).toContain("summary ready; starting RSVP");
-    expect(result.output).toContain("summary:medium");
+    expect(result.output).toContain("[RSVP] Press Space to start");
   });
 
   it("supports url input with explicit scroll mode", () => {
@@ -149,6 +149,6 @@ describe("url + summary PTY contract", () => {
     expect(result.exitCode).toBe(0);
     expect(result.output).toContain("fetching article from https://example.com/article");
     expect(result.output).toContain("[ok] article loaded: Mock Article");
-    expect(result.output).toContain("Press Space to start (Scroll)");
+    expect(result.output).toContain("[Scroll] Press");
   });
 });

@@ -51,7 +51,7 @@ describe("Chunked screen layout", () => {
       })
     );
 
-    expect(output).toContain("Press Space to start (Chunked)");
+    expect(output).toMatch(/\[Chunked\]\s+Pres\.\.\./);
   });
 
   it("renders key phrase preview before playback start", () => {

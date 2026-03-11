@@ -31,6 +31,10 @@ import { ProgressBar } from "../components/ProgressBar";
 import { StatusBar } from "../components/StatusBar";
 import { getTextScaleConfig, type TextScalePreset } from "../text-scale";
 import { sanitizeTerminalText } from "../../terminal/sanitize-terminal-text";
+import {
+  resolveHelpOverlayInput,
+  shouldPauseForHelpOverlayOpen,
+} from "../help-overlay-input";
 
 interface GuidedScrollScreenProps {
   words: Word[];
@@ -116,6 +120,14 @@ function stepBackwardByLine(reader: Reader, lineMap: ReturnType<typeof computeLi
   }
 
   return { ...paused, currentIndex: getPreviousLineStartIndex(lineMap, paused.currentIndex) };
+}
+
+export function getScrollHelpOverlayInputResult(
+  input: string,
+  escape: boolean,
+  helpVisible: boolean
+) {
+  return resolveHelpOverlayInput({ input, escape, helpVisible });
 }
 
 export function GuidedScrollScreen({
@@ -241,18 +253,21 @@ export function GuidedScrollScreen({
       return;
     }
 
-    if (activeHelpVisible) {
-      if (input === "?" || key.escape) {
-        setActiveHelpVisible(false);
+    const helpInputResult = getScrollHelpOverlayInputResult(
+      input,
+      key.escape,
+      activeHelpVisible
+    );
+    if (helpInputResult.nextHelpVisible !== null) {
+      if (shouldPauseForHelpOverlayOpen(activeReader.state, helpInputResult.nextHelpVisible)) {
+        applyReaderUpdate(togglePlayPause);
       }
+
+      setActiveHelpVisible(helpInputResult.nextHelpVisible);
       return;
     }
 
-    if (input === "?") {
-      if (activeReader.state === "playing") {
-        applyReaderUpdate(togglePlayPause);
-      }
-      setActiveHelpVisible(true);
+    if (helpInputResult.suppressInput) {
       return;
     }
 
@@ -455,6 +470,7 @@ export function GuidedScrollScreen({
             activeMode={mode}
             dimColor={textScaleConfig.statusDim}
             separator={textScaleConfig.statusSeparator}
+            maxWidth={width}
           />
         </>
       )}

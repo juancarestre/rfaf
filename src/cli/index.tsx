@@ -55,6 +55,7 @@ import {
   resolveTranslateOption,
   wasTranslateFlagProvided,
 } from "./translate-option";
+import { getCliRuntimeControlLines } from "../runtime-controls";
 
 function useAlternateScreen(): boolean {
   if (process.env.RFAF_NO_ALT_SCREEN === "1") {
@@ -375,9 +376,7 @@ async function main() {
       "$0 article.txt --summary=medium --mode=scroll",
       "Summarize then read in scroll mode"
     )
-    .epilog(
-      "Runtime controls: Space play/pause, Left/Right seek, Up/Down WPM, 1-4 switch mode, ? help, q quit"
-    )
+    .epilog(["Runtime controls:", ...getCliRuntimeControlLines()].join("\n"))
     .exitProcess(false)
     .help()
     .version()

@@ -56,7 +56,7 @@ describe("App state management", () => {
       })
     );
 
-    expect(output).toContain("Press Space to start (Chunked)");
+    expect(output).toMatch(/\[Chunked\]\s+Pres\.\.\./);
     expect(output).toContain("alpha beta gamma");
   });
 

@@ -33,7 +33,28 @@ describe("StatusBar", () => {
       })
     );
 
-    expect(output).toContain("300 WPM   |   0:10 remaining   |   50%   |   Playing   |   stdin");
+    expect(output).toContain("300 WPM   |   0:10 remaining   |   50%   |   Playing");
+    expect(output).toContain("? help, ←/→ nav, ↑/↓");
+    expect(output).toContain("speed, r restart, q quit");
+    expect(output).toContain("restart, q quit   |   stdin");
     expect(output).not.toContain("\u001b[2m");
+  });
+
+  it("uses compact runtime hint and truncates source when width is constrained", () => {
+    const output = renderToString(
+      React.createElement(StatusBar, {
+        wpm: 300,
+        remainingSeconds: 107,
+        progress: 0.02,
+        stateLabel: "Paused",
+        sourceLabel: "tests/fixtures/a-very-long-source-label-for-terminal-width-contract.txt",
+        activeMode: "rsvp",
+        maxWidth: 70,
+      })
+    );
+
+    expect(output).toContain("? help");
+    expect(output).not.toContain("←/→ nav");
+    expect(output).toContain("...");
   });
 });

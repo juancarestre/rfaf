@@ -26,6 +26,10 @@ import { StatusBar } from "../components/StatusBar";
 import { WordDisplay } from "../components/WordDisplay";
 import { getTextScaleConfig, type TextScalePreset } from "../text-scale";
 import { sanitizeTerminalText } from "../sanitize-terminal-text";
+import {
+  resolveHelpOverlayInput,
+  shouldPauseForHelpOverlayOpen,
+} from "../help-overlay-input";
 
 interface RSVPScreenProps {
   words: Word[];
@@ -57,6 +61,14 @@ export function getReadingLaneLayout(_: TextScalePreset): {
 
 export function getOrpVisualStyle(mode: ReadingMode): "default" | "subtle" {
   return mode === "bionic" ? "subtle" : "default";
+}
+
+export function getRsvpHelpOverlayInputResult(
+  input: string,
+  escape: boolean,
+  helpVisible: boolean
+) {
+  return resolveHelpOverlayInput({ input, escape, helpVisible });
 }
 
 function getLiveReadingTimeMs(session: Session): number {
@@ -211,18 +223,21 @@ export function RSVPScreen({
       return;
     }
 
-    if (activeHelpVisible) {
-      if (input === "?" || key.escape) {
-        setActiveHelpVisible(false);
+    const helpInputResult = getRsvpHelpOverlayInputResult(
+      input,
+      key.escape,
+      activeHelpVisible
+    );
+    if (helpInputResult.nextHelpVisible !== null) {
+      if (shouldPauseForHelpOverlayOpen(activeReader.state, helpInputResult.nextHelpVisible)) {
+        applyReaderUpdate(togglePlayPause);
       }
+
+      setActiveHelpVisible(helpInputResult.nextHelpVisible);
       return;
     }
 
-    if (input === "?") {
-      if (activeReader.state === "playing") {
-        applyReaderUpdate(togglePlayPause);
-      }
-      setActiveHelpVisible(true);
+    if (helpInputResult.suppressInput) {
       return;
     }
 
@@ -387,6 +402,7 @@ export function RSVPScreen({
             activeMode={mode}
             dimColor={textScaleConfig.statusDim}
             separator={textScaleConfig.statusSeparator}
+            maxWidth={width}
           />
         </>
       )}
