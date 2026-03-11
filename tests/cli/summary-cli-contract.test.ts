@@ -176,4 +176,41 @@ describe("summary CLI contract", () => {
     expect(result.stderr).toContain("[error] summarization failed");
     expect(result.stderr).toContain("summary length check failed");
   });
+
+  it("automatically chunks long summary input and succeeds without new flags", () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "rfaf-summary-long-input-contract-"));
+    const rfafDir = join(homeDir, ".rfaf");
+    mkdirSync(rfafDir, { recursive: true });
+    writeFileSync(
+      join(rfafDir, "config.yaml"),
+      [
+        "llm:",
+        "  provider: openai",
+        "  model: gpt-4o-mini",
+        "defaults:",
+        "  timeout_ms: 5000",
+        "  max_retries: 0",
+      ].join("\n")
+    );
+
+    const longInputPath = join(homeDir, "long-summary-input.txt");
+    writeFileSync(
+      longInputPath,
+      "alpha beta gamma delta epsilon zeta eta theta iota kappa ".repeat(450)
+    );
+
+    const result = runCliWithPreload(
+      "./tests/fixtures/preload-summary-mock.ts",
+      ["--summary=long", longInputPath],
+      {
+        HOME: homeDir,
+        OPENAI_API_KEY: "dummy",
+        RFAF_SUMMARY_MOCK_SCENARIO: "long-input-chunk-required",
+      }
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toContain("summarizing (long)");
+    expect(result.stderr).not.toContain("[error] summarization failed");
+  });
 });

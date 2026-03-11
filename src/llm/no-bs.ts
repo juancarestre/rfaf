@@ -6,6 +6,11 @@ import { z } from "zod";
 import type { LLMProvider } from "../config/llm-config";
 import { assertInputWithinLimit } from "../ingest/constants";
 import { NoBsRuntimeError } from "../cli/errors";
+import {
+  shouldUseLongInputChunking,
+  splitIntoLongInputChunks,
+} from "./long-input-chunking";
+import { mergeLongInputChunks } from "./long-input-merge";
 
 export const MAX_NO_BS_BYTES = 512 * 1024;
 
@@ -426,62 +431,108 @@ export async function noBsTextWithGenerator(
   generate: NoBsGenerator
 ): Promise<string> {
   const model = createModel(input.provider, input.model, input.apiKey);
-  const prompt = buildNoBsPrompt(input.input);
-  const sourceProfile = buildSourceProfile(input.input);
 
-  let attempt = 0;
-  let lastError: unknown;
+  const runSinglePass = async (sourceText: string): Promise<string> => {
+    const prompt = buildNoBsPrompt(sourceText);
+    const sourceProfile = buildSourceProfile(sourceText);
+    let attempt = 0;
+    let lastError: unknown;
 
-  while (attempt <= input.maxRetries) {
-    try {
-      const { signal, dispose } = mergedAbortSignal(input.timeoutMs, input.signal);
-      const result = await generate({
-        model,
-        schema: NoBsResponseSchema,
-        prompt,
-        abortSignal: signal,
-      }).finally(dispose);
+    while (attempt <= input.maxRetries) {
+      try {
+        const { signal, dispose } = mergedAbortSignal(input.timeoutMs, input.signal);
+        const result = await generate({
+          model,
+          schema: NoBsResponseSchema,
+          prompt,
+          abortSignal: signal,
+        }).finally(dispose);
 
-      const normalized = normalizeNoBsText(result.object.cleaned_text);
-      if (!normalized) {
-        throw new NoBsRuntimeError("No-BS failed [schema]: no-bs produced empty text.", "schema");
+        const normalized = normalizeNoBsText(result.object.cleaned_text);
+        if (!normalized) {
+          throw new NoBsRuntimeError("No-BS failed [schema]: no-bs produced empty text.", "schema");
+        }
+
+        if (violatesLanguagePreservation(sourceProfile, normalized)) {
+          throw new NoBsRuntimeError(
+            "No-BS failed [schema]: language preservation check failed; cleaned text language differs from source.",
+            "schema"
+          );
+        }
+
+        if (violatesFactPreservation(sourceProfile, normalized)) {
+          throw new NoBsRuntimeError(
+            "No-BS failed [schema]: fact preservation check failed; cleaned text introduced unsupported claims.",
+            "schema"
+          );
+        }
+
+        if (violatesContentPreservation(sourceText, normalized)) {
+          throw new NoBsRuntimeError(
+            `No-BS failed [schema]: ${CONTENT_PRESERVATION_FAILURE_REASON}; cleaned text appears summarized or truncated.`,
+            "schema"
+          );
+        }
+
+        assertInputWithinLimit(Buffer.byteLength(normalized, "utf8"), MAX_NO_BS_BYTES);
+        return normalized;
+      } catch (error: unknown) {
+        lastError = error;
+        if (attempt >= input.maxRetries || !isTransientRuntimeError(error)) {
+          break;
+        }
+
+        await sleep(getRetryDelayMs(attempt));
+        attempt += 1;
       }
-
-      if (violatesLanguagePreservation(sourceProfile, normalized)) {
-        throw new NoBsRuntimeError(
-          "No-BS failed [schema]: language preservation check failed; cleaned text language differs from source.",
-          "schema"
-        );
-      }
-
-      if (violatesFactPreservation(sourceProfile, normalized)) {
-        throw new NoBsRuntimeError(
-          "No-BS failed [schema]: fact preservation check failed; cleaned text introduced unsupported claims.",
-          "schema"
-        );
-      }
-
-      if (violatesContentPreservation(input.input, normalized)) {
-        throw new NoBsRuntimeError(
-          `No-BS failed [schema]: ${CONTENT_PRESERVATION_FAILURE_REASON}; cleaned text appears summarized or truncated.`,
-          "schema"
-        );
-      }
-
-      assertInputWithinLimit(Buffer.byteLength(normalized, "utf8"), MAX_NO_BS_BYTES);
-      return normalized;
-    } catch (error: unknown) {
-      lastError = error;
-      if (attempt >= input.maxRetries || !isTransientRuntimeError(error)) {
-        break;
-      }
-
-      await sleep(getRetryDelayMs(attempt));
-      attempt += 1;
     }
+
+    throw classifyRuntimeError(lastError);
+  };
+
+  if (!shouldUseLongInputChunking(input.input)) {
+    return runSinglePass(input.input);
   }
 
-  throw classifyRuntimeError(lastError);
+  const chunks = splitIntoLongInputChunks(input.input);
+  if (chunks.length <= 1) {
+    return runSinglePass(input.input);
+  }
+
+  const cleanedChunks: string[] = [];
+  for (const chunk of chunks) {
+    cleanedChunks.push(await runSinglePass(chunk));
+  }
+
+  const merged = mergeLongInputChunks(cleanedChunks);
+  if (!merged) {
+    throw new NoBsRuntimeError("No-BS failed [schema]: no-bs produced empty text.", "schema");
+  }
+
+  const mergedSourceProfile = buildSourceProfile(input.input);
+  if (violatesLanguagePreservation(mergedSourceProfile, merged)) {
+    throw new NoBsRuntimeError(
+      "No-BS failed [schema]: language preservation check failed; cleaned text language differs from source.",
+      "schema"
+    );
+  }
+
+  if (violatesFactPreservation(mergedSourceProfile, merged)) {
+    throw new NoBsRuntimeError(
+      "No-BS failed [schema]: fact preservation check failed; cleaned text introduced unsupported claims.",
+      "schema"
+    );
+  }
+
+  if (violatesContentPreservation(input.input, merged)) {
+    throw new NoBsRuntimeError(
+      `No-BS failed [schema]: ${CONTENT_PRESERVATION_FAILURE_REASON}; cleaned text appears summarized or truncated.`,
+      "schema"
+    );
+  }
+
+  assertInputWithinLimit(Buffer.byteLength(merged, "utf8"), MAX_NO_BS_BYTES);
+  return merged;
 }
 
 export async function noBsText(input: NoBsInput): Promise<string> {

@@ -1,6 +1,7 @@
 export {};
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const LONG_INPUT_THRESHOLD_BYTES = 10_000;
 
 const scenario = process.env.RFAF_SUMMARY_MOCK_SCENARIO ?? "language-mismatch";
 
@@ -51,6 +52,58 @@ function buildResponseSummary(summary: string): Response {
   );
 }
 
+function collectStrings(value: unknown, output: string[]): void {
+  if (typeof value === "string") {
+    output.push(value);
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectStrings(item, output);
+    }
+    return;
+  }
+
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) {
+      collectStrings(item, output);
+    }
+  }
+}
+
+function extractSummarySourceText(init?: RequestInit): string {
+  if (!init?.body || typeof init.body !== "string") {
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(init.body) as unknown;
+    const strings: string[] = [];
+    collectStrings(parsed, strings);
+    for (const candidate of strings) {
+      if (!candidate.includes("Text to summarize:")) {
+        continue;
+      }
+
+      const section = candidate.split("Text to summarize:\n\n")[1];
+      if (section) {
+        return section;
+      }
+    }
+  } catch {
+    return "";
+  }
+
+  return "";
+}
+
+function summarizeWithinBounds(text: string): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const target = Math.max(1, Math.ceil(words.length * 0.4));
+  return words.slice(0, target).join(" ");
+}
+
 const mockedFetch = Object.assign(
   async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = urlFromInput(input);
@@ -67,6 +120,15 @@ const mockedFetch = Object.assign(
 
     if (scenario === "length-mismatch") {
       return buildResponseSummary("Too short.");
+    }
+
+    if (scenario === "long-input-chunk-required") {
+      const source = extractSummarySourceText(init);
+      if (Buffer.byteLength(source, "utf8") >= LONG_INPUT_THRESHOLD_BYTES) {
+        return buildResponseSummary("Too short.");
+      }
+
+      return buildResponseSummary(summarizeWithinBounds(source));
     }
 
     return buildResponseSummary("Resumen en espanol que respeta el idioma original.");
