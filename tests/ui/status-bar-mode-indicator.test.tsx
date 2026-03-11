@@ -18,5 +18,10 @@ describe("StatusBar mode indicator", () => {
 
     expect(output).toContain("[Bionic]");
     expect(output).toContain("Paused");
+    expect(output).toContain("? help");
+    expect(output).toContain("←/→ nav");
+    expect(output).toContain("↑/↓ speed");
+    expect(output).toContain("speed, r");
+    expect(output).toContain("restart, q quit");
   });
 });

@@ -47,10 +47,11 @@ export function StatusBar({
   const safeStateLabel = sanitizeTerminalText(stateLabel);
   const safeSourceLabel = sanitizeTerminalText(sourceLabel);
   const modePrefix = activeMode ? `[${formatMode(activeMode)}] ` : "";
+  const runtimeHints = "? help, ←/→ nav, ↑/↓ speed, r restart, q quit";
 
   return (
     <Text dimColor={dimColor}>
-      {`${wpm} WPM${separator}${formatTime(remainingSeconds)} remaining${separator}${percent}%${separator}${modePrefix}${safeStateLabel}${separator}${safeSourceLabel}`}
+      {`${wpm} WPM${separator}${formatTime(remainingSeconds)} remaining${separator}${percent}%${separator}${modePrefix}${safeStateLabel}${separator}${runtimeHints}${separator}${safeSourceLabel}`}
     </Text>
   );
 }
