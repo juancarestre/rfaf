@@ -4,6 +4,10 @@ import { sanitizeTerminalText } from "../ui/sanitize-terminal-text";
 import { createLoadingIndicator, type LoadingIndicator } from "./loading-indicator";
 import { KeyPhrasesRuntimeError } from "./errors";
 import type { KeyPhrasesOption } from "./key-phrases-option";
+import {
+  resolveTimeoutRecoveryOutcome,
+  type TimeoutRecoveryOutcome,
+} from "./timeout-recovery";
 
 export interface KeyPhrasesFlowInput {
   documentContent: string;
@@ -13,6 +17,12 @@ export interface KeyPhrasesFlowInput {
   loadConfig?: (env: Record<string, string | undefined>) => LLMConfig;
   runExtract?: typeof extractKeyPhrases;
   createLoading?: (message: string) => LoadingIndicator;
+  resolveTimeoutOutcome?: (input: {
+    transformLabel: string;
+    isInteractive: boolean;
+  }) => Promise<TimeoutRecoveryOutcome>;
+  isInteractive?: boolean;
+  writeWarning?: (line: string) => void;
 }
 
 export interface KeyPhrasesFlowOutput {
@@ -35,6 +45,13 @@ export async function keyPhrasesBeforeRsvp(
   const env = input.env ?? (process.env as Record<string, string | undefined>);
   const resolveConfig = input.loadConfig ?? loadLLMConfig;
   const runExtract = input.runExtract ?? extractKeyPhrases;
+  const resolveTimeoutOutcome = input.resolveTimeoutOutcome ?? resolveTimeoutRecoveryOutcome;
+  const isInteractive = input.isInteractive ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  const writeWarning =
+    input.writeWarning ??
+    ((line: string) => {
+      process.stderr.write(`${sanitizeTerminalText(line)}\n`);
+    });
   const llmConfig = resolveConfig(env);
 
   const loadingFactory =
@@ -88,6 +105,22 @@ export async function keyPhrasesBeforeRsvp(
     loading.fail("key-phrases failed");
 
     if (error instanceof KeyPhrasesRuntimeError) {
+      if (error.stage === "timeout") {
+        const outcome = await resolveTimeoutOutcome({
+          transformLabel: "key-phrases",
+          isInteractive,
+        });
+
+        if (outcome === "continue") {
+          writeWarning("[warn] key-phrases timed out; continuing without key-phrases transform");
+          return {
+            readingContent: input.documentContent,
+            sourceLabel: input.sourceLabel,
+            keyPhrases: [],
+          };
+        }
+      }
+
       const provider = sanitizeTerminalText(llmConfig.provider);
       const model = sanitizeTerminalText(llmConfig.model);
       throw new KeyPhrasesRuntimeError(

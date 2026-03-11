@@ -4,6 +4,10 @@ import { createLoadingIndicator, type LoadingIndicator } from "./loading-indicat
 import type { SummaryOption, SummaryPreset } from "./summary-option";
 import { loadLLMConfig, type LLMConfig } from "../config/llm-config";
 import { summarizeText } from "../llm/summarize";
+import {
+  resolveTimeoutRecoveryOutcome,
+  type TimeoutRecoveryOutcome,
+} from "./timeout-recovery";
 
 export interface SummarizeFlowInput {
   documentContent: string;
@@ -13,6 +17,12 @@ export interface SummarizeFlowInput {
   loadConfig?: (env: Record<string, string | undefined>) => LLMConfig;
   summarize?: typeof summarizeText;
   createLoading?: (message: string) => LoadingIndicator;
+  resolveTimeoutOutcome?: (input: {
+    transformLabel: string;
+    isInteractive: boolean;
+  }) => Promise<TimeoutRecoveryOutcome>;
+  isInteractive?: boolean;
+  writeWarning?: (line: string) => void;
 }
 
 export interface SummarizeFlowOutput {
@@ -33,6 +43,13 @@ export async function summarizeBeforeRsvp(
   const env = input.env ?? (process.env as Record<string, string | undefined>);
   const resolveConfig = input.loadConfig ?? loadLLMConfig;
   const runSummarize = input.summarize ?? summarizeText;
+  const resolveTimeoutOutcome = input.resolveTimeoutOutcome ?? resolveTimeoutRecoveryOutcome;
+  const isInteractive = input.isInteractive ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  const writeWarning =
+    input.writeWarning ??
+    ((line: string) => {
+      process.stderr.write(`${sanitizeTerminalText(line)}\n`);
+    });
   const llmConfig = resolveConfig(env);
   const effectivePreset: SummaryPreset = input.summaryOption.preset ?? llmConfig.defaultPreset;
 
@@ -79,6 +96,21 @@ export async function summarizeBeforeRsvp(
     loading.fail("summarization failed");
 
     if (error instanceof SummarizeRuntimeError) {
+      if (error.stage === "timeout") {
+        const outcome = await resolveTimeoutOutcome({
+          transformLabel: "summary",
+          isInteractive,
+        });
+
+        if (outcome === "continue") {
+          writeWarning("[warn] summary timed out; continuing without summary transform");
+          return {
+            readingContent: input.documentContent,
+            sourceLabel: input.sourceLabel,
+          };
+        }
+      }
+
       const provider = sanitizeTerminalText(llmConfig.provider);
       const model = sanitizeTerminalText(llmConfig.model);
       throw new SummarizeRuntimeError(

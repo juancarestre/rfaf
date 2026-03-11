@@ -11,6 +11,11 @@ import {
   splitIntoLongInputChunks,
 } from "./long-input-chunking";
 import { mergeLongInputChunks } from "./long-input-merge";
+import {
+  createTimeoutDeadline,
+  resolveAdaptiveTimeoutMs,
+  resolveRemainingTimeoutMs,
+} from "./timeout-policy";
 
 export const MAX_NO_BS_BYTES = 512 * 1024;
 
@@ -431,7 +436,9 @@ export async function noBsTextWithGenerator(
   generate: NoBsGenerator
 ): Promise<string> {
   const model = createModel(input.provider, input.model, input.apiKey);
-  const timeoutDeadlineMs = Date.now() + input.timeoutMs;
+  const timeoutDeadlineMs = createTimeoutDeadline(
+    resolveAdaptiveTimeoutMs(input.timeoutMs, input.input)
+  );
 
   const runSinglePass = async (sourceText: string): Promise<string> => {
     const prompt = buildNoBsPrompt(sourceText);
@@ -440,7 +447,7 @@ export async function noBsTextWithGenerator(
     let lastError: unknown;
 
     while (attempt <= input.maxRetries) {
-      const remainingTimeoutMs = timeoutDeadlineMs - Date.now();
+      const remainingTimeoutMs = resolveRemainingTimeoutMs(timeoutDeadlineMs);
       if (remainingTimeoutMs <= 0) {
         lastError = new NoBsRuntimeError("No-BS failed [timeout]: request timed out.", "timeout");
         break;

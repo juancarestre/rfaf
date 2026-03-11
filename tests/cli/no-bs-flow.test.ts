@@ -74,4 +74,32 @@ describe("noBsBeforeRsvp", () => {
 
     expect(process.listenerCount("SIGINT")).toBe(beforeListeners);
   });
+
+  it("continues without no-bs when timeout recovery outcome is continue", async () => {
+    const warnings: string[] = [];
+
+    const result = await noBsBeforeRsvp({
+      documentContent: "Texto original",
+      sourceLabel: "stdin",
+      noBsOption: { enabled: true },
+      cleanText: () => "Texto limpio",
+      runNoBs: async () => {
+        throw new NoBsRuntimeError("No-BS failed [timeout]: request timed out.", "timeout");
+      },
+      loadConfig: () => ({
+        provider: "openai",
+        model: "gpt-4o-mini",
+        apiKey: "test",
+        defaultPreset: "medium",
+        timeoutMs: 1000,
+        maxRetries: 0,
+      }),
+      resolveTimeoutOutcome: async () => "continue",
+      writeWarning: (line) => warnings.push(line),
+    });
+
+    expect(result.readingContent).toBe("Texto original");
+    expect(result.sourceLabel).toBe("stdin");
+    expect(warnings).toContain("[warn] no-bs timed out; continuing without no-bs transform");
+  });
 });

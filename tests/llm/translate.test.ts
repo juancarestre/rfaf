@@ -182,6 +182,40 @@ describe("translate llm", () => {
     ).rejects.toThrow("[timeout]");
   });
 
+  it("enforces one global timeout budget across retries", async () => {
+    let calls = 0;
+
+    await expect(
+      translateTextWithGenerator(
+        {
+          provider: "openai",
+          model: "gpt-4o-mini",
+          apiKey: "test",
+          targetLanguage: "es",
+          input: "Translate this text.",
+          timeoutMs: 1,
+          maxRetries: 2,
+        },
+        async ({ abortSignal }) => {
+          calls += 1;
+          await new Promise<void>((_, reject) => {
+            abortSignal.addEventListener(
+              "abort",
+              () => {
+                reject(new Error("timeout"));
+              },
+              { once: true }
+            );
+          });
+
+          return { object: { translated_text: "should not happen" } };
+        }
+      )
+    ).rejects.toThrow("[timeout]");
+
+    expect(calls).toBe(1);
+  });
+
   it("classifies SIGINT/cancel failures deterministically", async () => {
     await expect(
       translateTextWithGenerator(

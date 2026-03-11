@@ -6,10 +6,15 @@ import {
 } from "../llm/language-normalizer";
 import { translateContentInChunks } from "../llm/translate-chunking";
 import { translateText, type TranslateInput } from "../llm/translate";
+import { createTimeoutDeadline, resolveAdaptiveTimeoutMs } from "../llm/timeout-policy";
 import { sanitizeTerminalText } from "../ui/sanitize-terminal-text";
 import { createLoadingIndicator, type LoadingIndicator } from "./loading-indicator";
 import { TranslateRuntimeError, UsageError } from "./errors";
 import type { TranslateOption } from "./translate-option";
+import {
+  resolveTimeoutRecoveryOutcome,
+  type TimeoutRecoveryOutcome,
+} from "./timeout-recovery";
 
 export interface TranslateFlowInput {
   documentContent: string;
@@ -20,6 +25,12 @@ export interface TranslateFlowInput {
   normalizeTarget?: (input: LanguageNormalizerInput) => Promise<string>;
   translate?: (input: TranslateInput) => Promise<string>;
   createLoading?: (message: string) => LoadingIndicator;
+  resolveTimeoutOutcome?: (input: {
+    transformLabel: string;
+    isInteractive: boolean;
+  }) => Promise<TimeoutRecoveryOutcome>;
+  isInteractive?: boolean;
+  writeWarning?: (line: string) => void;
 }
 
 export interface TranslateFlowOutput {
@@ -41,6 +52,13 @@ export async function translateBeforeRsvp(
   const resolveConfig = input.loadConfig ?? loadLLMConfig;
   const normalizeTarget = input.normalizeTarget ?? normalizeTargetLanguage;
   const translate = input.translate ?? translateText;
+  const resolveTimeoutOutcome = input.resolveTimeoutOutcome ?? resolveTimeoutRecoveryOutcome;
+  const isInteractive = input.isInteractive ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  const writeWarning =
+    input.writeWarning ??
+    ((line: string) => {
+      process.stderr.write(`${sanitizeTerminalText(line)}\n`);
+    });
   const llmConfig = resolveConfig(env);
 
   let targetLanguage: string;
@@ -81,6 +99,9 @@ export async function translateBeforeRsvp(
   loading.start();
 
   try {
+    const timeoutMs = resolveAdaptiveTimeoutMs(llmConfig.timeoutMs, input.documentContent);
+    const timeoutDeadlineMs = createTimeoutDeadline(timeoutMs);
+
     const translated = await translateContentInChunks({
       content: input.documentContent,
       translateChunk: async (chunk) =>
@@ -90,9 +111,10 @@ export async function translateBeforeRsvp(
           apiKey: llmConfig.apiKey,
           targetLanguage,
           input: chunk,
-          timeoutMs: llmConfig.timeoutMs,
+          timeoutMs,
           maxRetries: llmConfig.maxRetries,
           signal: abortController.signal,
+          timeoutDeadlineMs,
         }),
     });
 
@@ -108,6 +130,21 @@ export async function translateBeforeRsvp(
     loading.fail("translation failed");
 
     if (error instanceof TranslateRuntimeError) {
+      if (error.stage === "timeout") {
+        const outcome = await resolveTimeoutOutcome({
+          transformLabel: "translation",
+          isInteractive,
+        });
+
+        if (outcome === "continue") {
+          writeWarning("[warn] translation timed out; continuing without translation transform");
+          return {
+            readingContent: input.documentContent,
+            sourceLabel: input.sourceLabel,
+          };
+        }
+      }
+
       const provider = sanitizeTerminalText(llmConfig.provider);
       const model = sanitizeTerminalText(llmConfig.model);
       throw new TranslateRuntimeError(
