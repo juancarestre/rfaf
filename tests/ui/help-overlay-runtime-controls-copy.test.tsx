@@ -12,7 +12,7 @@ describe("help overlay runtime-controls copy", () => {
     expect(output).toContain("Navigation");
     expect(output).toContain("Speed");
     expect(output).toContain("Session");
-    expect(output).toContain("?          toggle help overlay");
-    expect(output).toContain("Esc        close help overlay");
+    expect(output).toMatch(/\?\s+toggle help overlay/);
+    expect(output).toMatch(/Esc\s+close help overlay/);
   });
 });

@@ -470,6 +470,7 @@ export function GuidedScrollScreen({
             activeMode={mode}
             dimColor={textScaleConfig.statusDim}
             separator={textScaleConfig.statusSeparator}
+            maxWidth={width}
           />
         </>
       )}

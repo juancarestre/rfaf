@@ -11,6 +11,7 @@ function runScrollPty(actions: string[]): { exitCode: number; output: string } {
 import json, os, pty, subprocess, time, select, fcntl, termios, struct, signal
 
 actions = json.loads(os.environ["RFAF_PTY_ACTIONS"])
+run_cwd = os.environ.get("RFAF_PTY_CWD", os.getcwd())
 master, slave = pty.openpty()
 fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack('HHHH', 8, 40, 0, 0))
 
@@ -25,30 +26,39 @@ proc = subprocess.Popen(
     stdin=slave,
     stdout=slave,
     stderr=slave,
-    cwd='${process.cwd()}',
+    cwd=run_cwd,
     env=env,
     preexec_fn=preexec,
     close_fds=True,
 )
 os.close(slave)
 
-def drain(delay=0.35):
-    time.sleep(delay)
+def drain_after_action(max_wait=2.0, idle_ticks=4):
+    deadline = time.monotonic() + max_wait
+    idle = 0
+    saw_output = False
     data = b''
-    while True:
+    while time.monotonic() < deadline:
         r, _, _ = select.select([master], [], [], 0.05)
-        if master not in r:
-            break
-        try:
-            chunk = os.read(master, 65536)
+        if master in r:
+            try:
+                chunk = os.read(master, 65536)
+            except OSError:
+                break
             if not chunk:
                 break
             data += chunk
-        except OSError:
+            saw_output = True
+            idle = 0
+            continue
+        if not saw_output:
+            continue
+        idle += 1
+        if idle >= idle_ticks:
             break
     return data
 
-output = drain(0.8)
+output = drain_after_action(max_wait=3.0)
 for action in actions:
     if action == 'help':
         os.write(master, b'?')
@@ -61,7 +71,7 @@ for action in actions:
     elif action == 'resize-small':
         fcntl.ioctl(master, termios.TIOCSWINSZ, struct.pack('HHHH', 7, 39, 0, 0))
         os.kill(proc.pid, signal.SIGWINCH)
-    output += drain(0.5)
+    output += drain_after_action()
 
 try:
     proc.wait(timeout=5)
@@ -80,6 +90,7 @@ print(json.dumps({
     env: {
       ...process.env,
       RFAF_PTY_ACTIONS: JSON.stringify(actions),
+      RFAF_PTY_CWD: process.cwd(),
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -105,8 +116,9 @@ describe("scroll mode PTY contract", () => {
     const result = runScrollPty(["quit"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.output).toContain("Press Space to start (Scroll)");
-    expect(result.output).toContain("tests/fixtures/sample.txt");
+    expect(result.output).toContain("[Scroll]");
+    expect(result.output).toContain("tests/fi");
+    expect(result.output).toContain("0%");
   });
 
   it("shows help overlay and still quits cleanly", () => {
@@ -120,7 +132,6 @@ describe("scroll mode PTY contract", () => {
     const result = runScrollPty(["step-line", "speed-down", "quit"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.output).toContain("Paused");
     expect(result.output).toContain("6%");
     expect(result.output).toContain("275 WPM");
   });

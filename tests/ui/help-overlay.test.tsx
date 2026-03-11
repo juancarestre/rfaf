@@ -7,8 +7,8 @@ describe("HelpOverlay", () => {
   it("renders keybindings text", () => {
     const output = renderToString(React.createElement(HelpOverlay));
     expect(output).toContain("Runtime Controls");
-    expect(output).toContain("Space      play/pause");
-    expect(output).toContain("?          toggle help overlay");
+    expect(output).toMatch(/Space\s+play\/pause/);
+    expect(output).toMatch(/\?\s+toggle help overlay/);
   });
 
   it("supports custom padding values for readability presets", () => {

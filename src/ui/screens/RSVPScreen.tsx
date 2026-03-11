@@ -402,6 +402,7 @@ export function RSVPScreen({
             activeMode={mode}
             dimColor={textScaleConfig.statusDim}
             separator={textScaleConfig.statusSeparator}
+            maxWidth={width}
           />
         </>
       )}
