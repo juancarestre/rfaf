@@ -41,13 +41,18 @@ import {
 import { extractKeyPhrases } from "../llm/key-phrases";
 import { noBsText } from "../llm/no-bs";
 import { summarizeText } from "../llm/summarize";
-import { translateContentInChunks } from "../llm/translate-chunking";
+import {
+  DEFAULT_TRANSLATE_CONCURRENCY,
+  splitIntoTranslationChunks,
+  translateContentInChunks,
+} from "../llm/translate-chunking";
 import {
   LanguageNormalizationError,
   normalizeTargetLanguage,
 } from "../llm/language-normalizer";
 import { recommendStrategy } from "../llm/strategy";
 import { translateText } from "../llm/translate";
+import { createTimeoutDeadline, resolveAdaptiveTimeoutMs } from "../llm/timeout-policy";
 import { applyDeterministicNoBs } from "../processor/no-bs-cleaner";
 import { annotateWordsWithKeyPhrases } from "../processor/key-phrase-annotation";
 import { getWordsForMode, type ModeWordCache, transformWordsForMode } from "../processor/mode-transform";
@@ -139,12 +144,14 @@ export interface AgentReaderState {
 }
 
 type AgentKeyPhrasesMode = "preview" | "list";
+type AgentTimeoutOutcome = "continue" | "abort";
 
 interface AgentSummarizeCommand {
   preset: SummaryPreset;
   sourceLabel: string;
   readingMode?: ReadingMode;
   signal?: AbortSignal;
+  timeoutOutcome?: AgentTimeoutOutcome;
   llmConfig: Pick<LLMConfig, "provider" | "model" | "apiKey" | "timeoutMs" | "maxRetries">;
 }
 
@@ -152,6 +159,7 @@ interface AgentNoBsCommand {
   sourceLabel: string;
   readingMode?: ReadingMode;
   signal?: AbortSignal;
+  timeoutOutcome?: AgentTimeoutOutcome;
   llmConfig: Pick<LLMConfig, "provider" | "model" | "apiKey" | "timeoutMs" | "maxRetries">;
 }
 
@@ -160,6 +168,7 @@ interface AgentTranslateCommand {
   sourceLabel: string;
   readingMode?: ReadingMode;
   signal?: AbortSignal;
+  timeoutOutcome?: AgentTimeoutOutcome;
   llmConfig: Pick<LLMConfig, "provider" | "model" | "apiKey" | "timeoutMs" | "maxRetries">;
 }
 
@@ -169,6 +178,7 @@ interface AgentKeyPhrasesCommand {
   readingMode?: ReadingMode;
   maxPhrases?: number;
   signal?: AbortSignal;
+  timeoutOutcome?: AgentTimeoutOutcome;
   llmConfig: Pick<LLMConfig, "provider" | "model" | "apiKey" | "timeoutMs" | "maxRetries">;
 }
 
@@ -320,6 +330,10 @@ function normalizeLlmRuntimeBounds(
     timeoutMs: llmConfig.timeoutMs,
     maxRetries: llmConfig.maxRetries,
   };
+}
+
+function resolveAgentTimeoutOutcome(value: AgentTimeoutOutcome | undefined): AgentTimeoutOutcome {
+  return value === "continue" ? "continue" : "abort";
 }
 
 function resolveKeyPhrasesMode(value: unknown): AgentKeyPhrasesMode {
@@ -673,6 +687,7 @@ export async function executeAgentSummarizeCommand(
       ? runtime.readingMode
       : requireReadingMode(command.readingMode, "summarize command");
   const runtimeBounds = normalizeLlmRuntimeBounds(command.llmConfig);
+  const timeoutOutcome = resolveAgentTimeoutOutcome(command.timeoutOutcome);
 
   const originalContent = runtime.sourceText;
   let summaryContent: string;
@@ -689,6 +704,10 @@ export async function executeAgentSummarizeCommand(
       });
   } catch (error: unknown) {
     if (error instanceof SummarizeRuntimeError) {
+      if (error.stage === "timeout" && timeoutOutcome === "continue") {
+        return runtime;
+      }
+
       const provider = sanitizeTerminalText(command.llmConfig.provider);
       const model = sanitizeTerminalText(command.llmConfig.model);
       const safeMessage = sanitizeRuntimeMessage(error.message, command.llmConfig.apiKey);
@@ -748,6 +767,7 @@ export async function executeAgentNoBsCommand(
       ? runtime.readingMode
       : requireReadingMode(command.readingMode, "no-bs command");
   const runtimeBounds = normalizeLlmRuntimeBounds(command.llmConfig);
+  const timeoutOutcome = resolveAgentTimeoutOutcome(command.timeoutOutcome);
 
   const originalContent = runtime.sourceText;
   const deterministicCleaned = cleanText(originalContent);
@@ -768,6 +788,10 @@ export async function executeAgentNoBsCommand(
       });
   } catch (error: unknown) {
     if (error instanceof NoBsRuntimeError) {
+      if (error.stage === "timeout" && timeoutOutcome === "continue") {
+        return runtime;
+      }
+
       const provider = sanitizeTerminalText(command.llmConfig.provider);
       const model = sanitizeTerminalText(command.llmConfig.model);
       const safeMessage = sanitizeRuntimeMessage(error.message, command.llmConfig.apiKey);
@@ -823,6 +847,7 @@ export async function executeAgentTranslateCommand(
       ? runtime.readingMode
       : requireReadingMode(command.readingMode, "translate command");
   const runtimeBounds = normalizeLlmRuntimeBounds(command.llmConfig);
+  const timeoutOutcome = resolveAgentTimeoutOutcome(command.timeoutOutcome);
 
   let targetLanguage: string;
   try {
@@ -842,6 +867,12 @@ export async function executeAgentTranslateCommand(
   }
 
   const originalContent = runtime.sourceText;
+  const chunkCount = splitIntoTranslationChunks(originalContent).length;
+  const chunkWaves = Math.max(1, Math.ceil(chunkCount / DEFAULT_TRANSLATE_CONCURRENCY));
+  const baseTimeoutMs = resolveAdaptiveTimeoutMs(runtimeBounds.timeoutMs, originalContent);
+  const timeoutMs = Math.min(baseTimeoutMs * chunkWaves, runtimeBounds.timeoutMs * 12);
+  const timeoutDeadlineMs = createTimeoutDeadline(timeoutMs);
+
   let translatedContent: string;
   try {
     translatedContent = await translateContentInChunks({
@@ -853,13 +884,18 @@ export async function executeAgentTranslateCommand(
           apiKey: command.llmConfig.apiKey,
           targetLanguage,
           input: chunk,
-          timeoutMs: runtimeBounds.timeoutMs,
+          timeoutMs,
           maxRetries: runtimeBounds.maxRetries,
           signal: command.signal,
+          timeoutDeadlineMs,
         }),
     });
   } catch (error: unknown) {
     if (error instanceof TranslateRuntimeError) {
+      if (error.stage === "timeout" && timeoutOutcome === "continue") {
+        return runtime;
+      }
+
       const provider = sanitizeTerminalText(command.llmConfig.provider);
       const model = sanitizeTerminalText(command.llmConfig.model);
       const safeMessage = sanitizeRuntimeMessage(error.message, command.llmConfig.apiKey);
@@ -915,6 +951,7 @@ export async function executeAgentKeyPhrasesCommand(
       : requireReadingMode(command.readingMode, "key-phrases command");
   const mode = resolveKeyPhrasesMode(command.mode);
   const runtimeBounds = normalizeLlmRuntimeBounds(command.llmConfig);
+  const timeoutOutcome = resolveAgentTimeoutOutcome(command.timeoutOutcome);
 
   const maxPhrases = Math.min(
     10,
@@ -936,6 +973,10 @@ export async function executeAgentKeyPhrasesCommand(
     });
   } catch (error: unknown) {
     if (error instanceof KeyPhrasesRuntimeError) {
+      if (error.stage === "timeout" && timeoutOutcome === "continue") {
+        return runtime;
+      }
+
       const provider = sanitizeTerminalText(command.llmConfig.provider);
       const model = sanitizeTerminalText(command.llmConfig.model);
       const safeMessage = sanitizeRuntimeMessage(error.message, command.llmConfig.apiKey);

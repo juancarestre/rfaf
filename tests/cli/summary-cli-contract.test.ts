@@ -87,7 +87,7 @@ describe("summary CLI contract", () => {
     expect(result.stderr).toContain("Config error");
   });
 
-  it("continues without summary on timeout with deterministic warning output", () => {
+  it("fails closed on timeout in non-interactive mode by default", () => {
     const homeDir = mkdtempSync(join(tmpdir(), "rfaf-summary-contract-"));
     const rfafDir = join(homeDir, ".rfaf");
     mkdirSync(rfafDir, { recursive: true });
@@ -108,11 +108,39 @@ describe("summary CLI contract", () => {
       OPENAI_API_KEY: "dummy",
     });
 
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("summarizing (medium) with openai/gpt-4o-mini");
     expect(result.stderr).not.toContain("Summarizing:");
     expect(result.stderr).toContain("[error] summarization failed");
+    expect(result.stderr).toContain("Summarization failed [timeout]");
+    expect(result.stderr).not.toContain("continuing without summary transform");
+  });
+
+  it("allows explicit non-interactive timeout continue via env flag", () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "rfaf-summary-contract-continue-"));
+    const rfafDir = join(homeDir, ".rfaf");
+    mkdirSync(rfafDir, { recursive: true });
+    writeFileSync(
+      join(rfafDir, "config.yaml"),
+      [
+        "llm:",
+        "  provider: openai",
+        "  model: gpt-4o-mini",
+        "defaults:",
+        "  timeout_ms: 1",
+        "  max_retries: 0",
+      ].join("\n")
+    );
+
+    const result = runCli(["--summary=medium", "tests/fixtures/sample.txt"], {
+      HOME: homeDir,
+      OPENAI_API_KEY: "dummy",
+      RFAF_TIMEOUT_CONTINUE: "1",
+    });
+
+    expect(result.exitCode).toBe(0);
     expect(result.stderr).toContain("[warn] summary timed out; continuing without summary transform");
+    expect(result.stderr).not.toContain("[error] summarization failed");
   });
 
   it("surfaces deterministic language-preservation failure for translated summary output", () => {

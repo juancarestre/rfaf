@@ -20,6 +20,7 @@ export interface KeyPhrasesFlowInput {
   resolveTimeoutOutcome?: (input: {
     transformLabel: string;
     isInteractive: boolean;
+    allowNonInteractiveContinue?: boolean;
   }) => Promise<TimeoutRecoveryOutcome>;
   isInteractive?: boolean;
   writeWarning?: (line: string) => void;
@@ -47,6 +48,7 @@ export async function keyPhrasesBeforeRsvp(
   const runExtract = input.runExtract ?? extractKeyPhrases;
   const resolveTimeoutOutcome = input.resolveTimeoutOutcome ?? resolveTimeoutRecoveryOutcome;
   const isInteractive = input.isInteractive ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  const allowNonInteractiveContinue = env.RFAF_TIMEOUT_CONTINUE === "1";
   const writeWarning =
     input.writeWarning ??
     ((line: string) => {
@@ -69,8 +71,10 @@ export async function keyPhrasesBeforeRsvp(
   const onSigInt = () => {
     abortController.abort(new Error("SIGINT"));
   };
+  let sigIntRegistered = false;
 
   process.once("SIGINT", onSigInt);
+  sigIntRegistered = true;
   loading.start();
 
   try {
@@ -101,17 +105,21 @@ export async function keyPhrasesBeforeRsvp(
       keyPhrases,
     };
   } catch (error: unknown) {
-    loading.stop();
-    loading.fail("key-phrases failed");
-
     if (error instanceof KeyPhrasesRuntimeError) {
       if (error.stage === "timeout") {
+        if (sigIntRegistered) {
+          process.removeListener("SIGINT", onSigInt);
+          sigIntRegistered = false;
+        }
+
         const outcome = await resolveTimeoutOutcome({
           transformLabel: "key-phrases",
           isInteractive,
+          allowNonInteractiveContinue,
         });
 
         if (outcome === "continue") {
+          loading.stop();
           writeWarning("[warn] key-phrases timed out; continuing without key-phrases transform");
           return {
             readingContent: input.documentContent,
@@ -120,6 +128,9 @@ export async function keyPhrasesBeforeRsvp(
           };
         }
       }
+
+      loading.stop();
+      loading.fail("key-phrases failed");
 
       const provider = sanitizeTerminalText(llmConfig.provider);
       const model = sanitizeTerminalText(llmConfig.model);
@@ -130,11 +141,15 @@ export async function keyPhrasesBeforeRsvp(
     }
 
     const message = error instanceof Error ? error.message : String(error);
+    loading.stop();
+    loading.fail("key-phrases failed");
     throw new KeyPhrasesRuntimeError(
       `Key-phrases failed [runtime]: ${sanitizeTerminalText(message)}`,
       "runtime"
     );
   } finally {
-    process.removeListener("SIGINT", onSigInt);
+    if (sigIntRegistered) {
+      process.removeListener("SIGINT", onSigInt);
+    }
   }
 }

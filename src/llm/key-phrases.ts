@@ -214,6 +214,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const RETRY_GUARD_MS = 150;
+
 export function buildKeyPhrasesPrompt(input: string, maxPhrases: number): string {
   return [
     "Extract key phrases for speed reading guidance.",
@@ -308,7 +310,17 @@ export async function extractKeyPhrasesWithGenerator(
         break;
       }
 
-      await sleep(getRetryDelayMs(attempt));
+      const retryRemainingMs = resolveRemainingTimeoutMs(timeoutDeadlineMs);
+      if (retryRemainingMs <= RETRY_GUARD_MS) {
+        break;
+      }
+
+      const delayMs = Math.min(getRetryDelayMs(attempt), Math.max(0, retryRemainingMs - RETRY_GUARD_MS));
+      if (delayMs <= 0) {
+        break;
+      }
+
+      await sleep(delayMs);
       attempt += 1;
     }
   }

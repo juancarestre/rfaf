@@ -20,6 +20,7 @@ export interface SummarizeFlowInput {
   resolveTimeoutOutcome?: (input: {
     transformLabel: string;
     isInteractive: boolean;
+    allowNonInteractiveContinue?: boolean;
   }) => Promise<TimeoutRecoveryOutcome>;
   isInteractive?: boolean;
   writeWarning?: (line: string) => void;
@@ -45,6 +46,7 @@ export async function summarizeBeforeRsvp(
   const runSummarize = input.summarize ?? summarizeText;
   const resolveTimeoutOutcome = input.resolveTimeoutOutcome ?? resolveTimeoutRecoveryOutcome;
   const isInteractive = input.isInteractive ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  const allowNonInteractiveContinue = env.RFAF_TIMEOUT_CONTINUE === "1";
   const writeWarning =
     input.writeWarning ??
     ((line: string) => {
@@ -68,8 +70,10 @@ export async function summarizeBeforeRsvp(
   const onSigInt = () => {
     abortController.abort(new Error("SIGINT"));
   };
+  let sigIntRegistered = false;
 
   process.once("SIGINT", onSigInt);
+  sigIntRegistered = true;
   loading.start();
 
   try {
@@ -92,17 +96,21 @@ export async function summarizeBeforeRsvp(
       sourceLabel: `${input.sourceLabel} (summary:${effectivePreset})`,
     };
   } catch (error: unknown) {
-    loading.stop();
-    loading.fail("summarization failed");
-
     if (error instanceof SummarizeRuntimeError) {
       if (error.stage === "timeout") {
+        if (sigIntRegistered) {
+          process.removeListener("SIGINT", onSigInt);
+          sigIntRegistered = false;
+        }
+
         const outcome = await resolveTimeoutOutcome({
           transformLabel: "summary",
           isInteractive,
+          allowNonInteractiveContinue,
         });
 
         if (outcome === "continue") {
+          loading.stop();
           writeWarning("[warn] summary timed out; continuing without summary transform");
           return {
             readingContent: input.documentContent,
@@ -110,6 +118,9 @@ export async function summarizeBeforeRsvp(
           };
         }
       }
+
+      loading.stop();
+      loading.fail("summarization failed");
 
       const provider = sanitizeTerminalText(llmConfig.provider);
       const model = sanitizeTerminalText(llmConfig.model);
@@ -120,11 +131,15 @@ export async function summarizeBeforeRsvp(
     }
 
     const message = error instanceof Error ? error.message : String(error);
+    loading.stop();
+    loading.fail("summarization failed");
     throw new SummarizeRuntimeError(
       `Summarization failed [runtime]: ${sanitizeTerminalText(message)}`,
       "runtime"
     );
   } finally {
-    process.removeListener("SIGINT", onSigInt);
+    if (sigIntRegistered) {
+      process.removeListener("SIGINT", onSigInt);
+    }
   }
 }

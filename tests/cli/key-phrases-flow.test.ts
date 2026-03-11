@@ -86,6 +86,7 @@ describe("keyPhrasesBeforeRsvp", () => {
   });
 
   it("continues without key-phrases when timeout recovery outcome is continue", async () => {
+    const calls: Array<"start" | "stop" | "succeed" | "fail"> = [];
     const warnings: string[] = [];
 
     const result = await keyPhrasesBeforeRsvp({
@@ -99,6 +100,12 @@ describe("keyPhrasesBeforeRsvp", () => {
         defaultPreset: "medium",
         timeoutMs: 1_000,
         maxRetries: 0,
+      }),
+      createLoading: () => ({
+        start: () => calls.push("start"),
+        stop: () => calls.push("stop"),
+        succeed: () => calls.push("succeed"),
+        fail: () => calls.push("fail"),
       }),
       runExtract: async () => {
         throw new KeyPhrasesRuntimeError(
@@ -116,5 +123,6 @@ describe("keyPhrasesBeforeRsvp", () => {
     expect(warnings).toContain(
       "[warn] key-phrases timed out; continuing without key-phrases transform"
     );
+    expect(calls).toEqual(["start", "stop"]);
   });
 });

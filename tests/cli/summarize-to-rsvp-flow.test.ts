@@ -134,6 +134,7 @@ describe("summarizeBeforeRsvp", () => {
   });
 
   it("continues without summary when timeout recovery outcome is continue", async () => {
+    const calls: Array<"start" | "stop" | "succeed" | "fail"> = [];
     const warnings: string[] = [];
 
     const result = await summarizeBeforeRsvp({
@@ -155,6 +156,12 @@ describe("summarizeBeforeRsvp", () => {
           "timeout"
         );
       },
+      createLoading: () => ({
+        start: () => calls.push("start"),
+        stop: () => calls.push("stop"),
+        succeed: () => calls.push("succeed"),
+        fail: () => calls.push("fail"),
+      }),
       resolveTimeoutOutcome: async () => "continue",
       writeWarning: (line) => warnings.push(line),
     });
@@ -162,6 +169,7 @@ describe("summarizeBeforeRsvp", () => {
     expect(result.readingContent).toBe("original");
     expect(result.sourceLabel).toBe("stdin");
     expect(warnings).toContain("[warn] summary timed out; continuing without summary transform");
+    expect(calls).toEqual(["start", "stop"]);
   });
 
   it("aborts when timeout recovery outcome is abort", async () => {

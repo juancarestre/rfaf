@@ -22,6 +22,7 @@ export interface NoBsFlowInput {
   resolveTimeoutOutcome?: (input: {
     transformLabel: string;
     isInteractive: boolean;
+    allowNonInteractiveContinue?: boolean;
   }) => Promise<TimeoutRecoveryOutcome>;
   isInteractive?: boolean;
   writeWarning?: (line: string) => void;
@@ -46,6 +47,7 @@ export async function noBsBeforeRsvp(input: NoBsFlowInput): Promise<NoBsFlowOutp
   const cleanText = input.cleanText ?? applyDeterministicNoBs;
   const resolveTimeoutOutcome = input.resolveTimeoutOutcome ?? resolveTimeoutRecoveryOutcome;
   const isInteractive = input.isInteractive ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  const allowNonInteractiveContinue = env.RFAF_TIMEOUT_CONTINUE === "1";
   const writeWarning =
     input.writeWarning ??
     ((line: string) => {
@@ -76,11 +78,13 @@ export async function noBsBeforeRsvp(input: NoBsFlowInput): Promise<NoBsFlowOutp
   const onSigInt = () => {
     abortController.abort(new Error("SIGINT"));
   };
+  let sigIntRegistered = false;
 
   let loadingStarted = false;
 
   try {
     process.once("SIGINT", onSigInt);
+    sigIntRegistered = true;
     loading.start();
     loadingStarted = true;
 
@@ -109,25 +113,35 @@ export async function noBsBeforeRsvp(input: NoBsFlowInput): Promise<NoBsFlowOutp
       sourceLabel: `${input.sourceLabel} (no-bs)`,
     };
   } catch (error: unknown) {
-    if (loadingStarted) {
-      loading.stop();
-      loading.fail("no-bs failed");
-    }
-
     if (error instanceof NoBsRuntimeError) {
       if (error.stage === "timeout") {
+        if (sigIntRegistered) {
+          process.removeListener("SIGINT", onSigInt);
+          sigIntRegistered = false;
+        }
+
         const outcome = await resolveTimeoutOutcome({
           transformLabel: "no-bs",
           isInteractive,
+          allowNonInteractiveContinue,
         });
 
         if (outcome === "continue") {
+          if (loadingStarted) {
+            loading.stop();
+          }
+
           writeWarning("[warn] no-bs timed out; continuing without no-bs transform");
           return {
             readingContent: input.documentContent,
             sourceLabel: input.sourceLabel,
           };
         }
+      }
+
+      if (loadingStarted) {
+        loading.stop();
+        loading.fail("no-bs failed");
       }
 
       const provider = sanitizeTerminalText(llmConfig.provider);
@@ -139,11 +153,17 @@ export async function noBsBeforeRsvp(input: NoBsFlowInput): Promise<NoBsFlowOutp
     }
 
     const message = error instanceof Error ? error.message : String(error);
+    if (loadingStarted) {
+      loading.stop();
+      loading.fail("no-bs failed");
+    }
     throw new NoBsRuntimeError(
       `No-BS failed [runtime]: ${sanitizeTerminalText(message)}`,
       "runtime"
     );
   } finally {
-    process.removeListener("SIGINT", onSigInt);
+    if (sigIntRegistered) {
+      process.removeListener("SIGINT", onSigInt);
+    }
   }
 }

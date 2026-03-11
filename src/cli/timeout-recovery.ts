@@ -8,7 +8,11 @@ export interface TimeoutRecoveryInput {
   ask?: (prompt: string) => Promise<string>;
   inputStream?: NodeJS.ReadableStream;
   outputStream?: NodeJS.WriteStream;
+  allowNonInteractiveContinue?: boolean;
+  promptTimeoutMs?: number;
 }
+
+const DEFAULT_PROMPT_TIMEOUT_MS = 30_000;
 
 function normalizeAnswer(value: string): string {
   return value.trim().toLowerCase();
@@ -23,7 +27,7 @@ export async function resolveTimeoutRecoveryOutcome(
   input: TimeoutRecoveryInput
 ): Promise<TimeoutRecoveryOutcome> {
   if (!input.isInteractive) {
-    return "continue";
+    return input.allowNonInteractiveContinue ? "continue" : "abort";
   }
 
   let closeAsk = () => {};
@@ -42,10 +46,18 @@ export async function resolveTimeoutRecoveryOutcome(
     })();
 
   try {
-    const answer = await ask(
-      `[warn] ${input.transformLabel} timed out. Continue without this transform? [Y/n]: `
-    );
+    const promptTimeoutMs = Math.max(1, Math.trunc(input.promptTimeoutMs ?? DEFAULT_PROMPT_TIMEOUT_MS));
+
+    const answer = await Promise.race<string>([
+      ask(`[warn] ${input.transformLabel} timed out. Continue without this transform? [Y/n]: `),
+      new Promise<string>((resolve) => {
+        setTimeout(() => resolve("n"), promptTimeoutMs);
+      }),
+    ]);
+
     return isContinueAnswer(answer) ? "continue" : "abort";
+  } catch {
+    return "abort";
   } finally {
     closeAsk();
   }
