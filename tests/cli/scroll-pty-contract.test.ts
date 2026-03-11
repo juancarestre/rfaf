@@ -113,7 +113,7 @@ describe("scroll mode PTY contract", () => {
     const result = runScrollPty(["help", "quit"]);
 
     expect(result.exitCode).toBe(0);
-    expect(result.output).toContain("close this help");
+    expect(result.output).toContain("close help overlay");
   });
 
   it("supports line-step and speed controls in PTY flow", () => {

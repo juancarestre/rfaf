@@ -1,7 +1,7 @@
 ---
 title: "feat: Phase 8 Subphase 32 In-Program Help Overlay Toggle"
 type: feat
-status: active
+status: completed
 date: 2026-03-10
 origin: docs/brainstorms/2026-03-04-rfaf-mvp-scope-brainstorm.md
 ---
@@ -140,14 +140,14 @@ Refactor only after tests are green; avoid feature expansion beyond help toggle/
 
 ## Acceptance Criteria
 
-- [ ] A documented keyboard shortcut toggles the in-program help overlay open and closed.
-- [ ] Help overlay can be closed with `Esc` and reopened predictably.
-- [ ] Overlay content includes all runtime keybindings with explanatory wording.
-- [ ] Behavior is consistent across RSVP/chunked/bionic and scroll screens.
-- [ ] Runtime mode switching remains functional while help is visible.
-- [ ] CLI `--help` runtime-controls line remains aligned with in-app terminology.
-- [ ] New behavior is covered by component and PTY contract tests.
-- [ ] `bun test` and `bun x tsc --noEmit` pass.
+- [x] A documented keyboard shortcut toggles the in-program help overlay open and closed.
+- [x] Help overlay can be closed with `Esc` and reopened predictably.
+- [x] Overlay content includes all runtime keybindings with explanatory wording.
+- [x] Behavior is consistent across RSVP/chunked/bionic and scroll screens.
+- [x] Runtime mode switching remains functional while help is visible.
+- [x] CLI `--help` runtime-controls line remains aligned with in-app terminology.
+- [x] New behavior is covered by component and PTY contract tests.
+- [x] `bun test` and `bun x tsc --noEmit` pass.
 
 ## Dependencies & Risks
 

@@ -376,7 +376,12 @@ async function main() {
       "Summarize then read in scroll mode"
     )
     .epilog(
-      "Runtime controls: Space play/pause, Left/Right seek, Up/Down WPM, 1-4 switch mode, ? help, q quit"
+      [
+        "Runtime controls:",
+        "Space play/pause | Left/Right step | Up/Down WPM",
+        "p/b paragraph | r restart | 1-4 switch mode",
+        "? toggle help | Esc close help | q quit",
+      ].join("\n")
     )
     .exitProcess(false)
     .help()

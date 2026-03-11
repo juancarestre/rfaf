@@ -12,18 +12,25 @@ export function HelpOverlay({ paddingX = 1, paddingY = 0, mode = "rsvp" }: HelpO
 
   return (
     <Box flexDirection="column" borderStyle="round" paddingX={paddingX} paddingY={paddingY}>
-      <Text bold>Keybindings</Text>
-      <Text>Space  pause/resume</Text>
+      <Text bold>Runtime Controls</Text>
+      <Text dimColor>Press ? to toggle this overlay. Press Esc to close.</Text>
+      <Text bold>Playback</Text>
+      <Text>Space      play/pause</Text>
+      <Text bold>Mode</Text>
       <Text>1-4        switch mode</Text>
+      <Text bold>Navigation</Text>
       <Text>{`l / Right  step forward (${stepUnit})`}</Text>
       <Text>{`h / Left   step backward (${stepUnit})`}</Text>
-      <Text>k / Up     +25 WPM</Text>
-      <Text>j / Down   -25 WPM</Text>
       <Text>p          next paragraph</Text>
       <Text>b          previous paragraph</Text>
+      <Text bold>Speed</Text>
+      <Text>k / Up     +25 WPM</Text>
+      <Text>j / Down   -25 WPM</Text>
+      <Text bold>Session</Text>
       <Text>r          restart</Text>
       <Text>q          quit</Text>
-      <Text>? / Esc    close this help</Text>
+      <Text>?          toggle help overlay</Text>
+      <Text>Esc        close help overlay</Text>
     </Box>
   );
 }

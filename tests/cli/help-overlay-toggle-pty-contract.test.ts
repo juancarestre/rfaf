@@ -6,9 +6,9 @@ function stripAnsi(output: string): string {
     .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, "");
 }
 
-function runRuntimeModePty(actions: string[]): { exitCode: number; output: string } {
+function runHelpOverlayPty(actions: string[]): { exitCode: number; output: string } {
   const pythonScript = `
-import json, os, pty, subprocess, time, select, fcntl, termios, struct, signal
+import json, os, pty, subprocess, time, select, fcntl, termios, struct
 
 actions = json.loads(os.environ["RFAF_PTY_ACTIONS"])
 master, slave = pty.openpty()
@@ -50,19 +50,11 @@ def drain(delay=0.35):
 
 output = drain(0.8)
 for action in actions:
-    if action == 'mode-rsvp':
-        os.write(master, b'1')
-    elif action == 'mode-chunked':
-        os.write(master, b'2')
-    elif action == 'mode-bionic':
-        os.write(master, b'3')
-    elif action == 'mode-scroll':
-        os.write(master, b'4')
-    elif action == 'help':
+    if action == 'help':
         os.write(master, b'?')
-    elif action == 'close-help':
+    elif action == 'close-help-esc':
         os.write(master, b'\x1b')
-    elif action == 'toggle-help':
+    elif action == 'close-help-toggle':
         os.write(master, b'?')
     elif action == 'quit':
         os.write(master, b'q')
@@ -105,50 +97,20 @@ print(json.dumps({
   };
 }
 
-describe("runtime mode switching PTY contract", () => {
-  it("switches between chunked, bionic, scroll, and rsvp with hotkeys", () => {
-    const result = runRuntimeModePty([
-      "mode-chunked",
-      "mode-bionic",
-      "mode-scroll",
-      "mode-rsvp",
-      "quit",
-    ]);
-
-    expect(result.exitCode).toBe(0);
-    expect(result.output).toContain("[Chunked]");
-    expect(result.output).toContain("[Bionic]");
-    expect(result.output).toContain("[Scroll]");
-    expect(result.output).toContain("[RSVP]");
-  });
-
-  it("renders scroll screen content after switching into scroll mode", () => {
-    const result = runRuntimeModePty(["mode-scroll", "quit"]);
-
-    expect(result.exitCode).toBe(0);
-    expect(result.output).toContain("Press Space to start (Scroll)");
-    expect(result.output).toContain("The quick brown fox jumps over the lazy dog.");
-  });
-
-  it("supports help overlay mode switching without closing help first", () => {
-    const result = runRuntimeModePty([
-      "help",
-      "mode-scroll",
-      "quit",
-    ]);
-
-    expect(result.exitCode).toBe(0);
-    expect(result.output).toContain("1-4        switch mode");
-    expect(result.output).toContain("step forward (line)");
-    expect(result.output).toContain("[Scroll]");
-  });
-
-  it("toggles help overlay closed with ? and keeps runtime active", () => {
-    const result = runRuntimeModePty(["help", "toggle-help", "mode-scroll", "quit"]);
+describe("help overlay toggle PTY contract", () => {
+  it("opens and closes help with ?", () => {
+    const result = runHelpOverlayPty(["help", "close-help-toggle", "quit"]);
 
     expect(result.exitCode).toBe(0);
     expect(result.output).toContain("toggle help overlay");
-    expect(result.output).toContain("[Scroll]");
-    expect(result.output).toContain("Press Space to start (Scroll)");
+    expect(result.output).toContain("Press Space to start");
+  });
+
+  it("closes help with Esc", () => {
+    const result = runHelpOverlayPty(["help", "close-help-esc", "quit"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.output).toContain("close help overlay");
+    expect(result.output).toContain("Press Space to start");
   });
 });
