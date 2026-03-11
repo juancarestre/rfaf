@@ -7,6 +7,7 @@ import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { createLoadingIndicator } from "./loading-indicator";
 import { renderHistoryCommand } from "./history-command";
+import { maybeBootstrapMissingDefaultConfig } from "./config-bootstrap";
 import { readFileSource } from "../ingest/file-dispatcher";
 import { isStdinPiped, resolveInputSource } from "../ingest/detect";
 import { readStdin } from "../ingest/stdin";
@@ -454,6 +455,19 @@ async function main() {
 
   const pendingWarning =
     source.kind === "file" || source.kind === "url" ? source.warning : undefined;
+  if (pendingWarning) {
+    process.stderr.write(`${pendingWarning}\n`);
+  }
+
+  await maybeBootstrapMissingDefaultConfig({
+    env: process.env as Record<string, string | undefined>,
+    transformRequested:
+      noBsOption.enabled ||
+      summaryOption.enabled ||
+      Boolean(translateOption.enabled && translateOption.target) ||
+      Boolean(keyPhrasesOption.enabled && keyPhrasesOption.maxPhrases),
+    failFastOnDecline: !strategyOption.enabled,
+  });
 
   let document: Document;
   if (source.kind === "file") {
@@ -493,10 +507,6 @@ async function main() {
     }
   } else {
     document = await readClipboard();
-  }
-
-  if (pendingWarning) {
-    process.stderr.write(`${pendingWarning}\n`);
   }
 
   if (quizOption.enabled) {

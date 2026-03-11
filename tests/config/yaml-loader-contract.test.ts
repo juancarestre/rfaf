@@ -2,7 +2,11 @@ import { describe, expect, it } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defaultConfigPath, loadLLMConfig } from "../../src/config/llm-config";
+import {
+  defaultConfigPath,
+  loadLLMConfig,
+  MissingConfigFileError,
+} from "../../src/config/llm-config";
 
 function createYamlConfig(dir: string, body?: string): string {
   mkdirSync(dir, { recursive: true });
@@ -81,5 +85,22 @@ describe("YAML loader contract", () => {
     expect(config.provider).toBe("anthropic");
     expect(config.model).toBe("claude-3-7-sonnet");
     expect(config.maxRetries).toBe(1);
+  });
+
+  it("throws typed missing-config error for missing YAML file", () => {
+    const missingPath = join(
+      mkdtempSync(join(tmpdir(), "rfaf-yaml-missing-")),
+      ".rfaf",
+      "config.yaml"
+    );
+
+    expect(() =>
+      loadLLMConfig(
+        {
+          OPENAI_API_KEY: "dummy",
+        },
+        missingPath
+      )
+    ).toThrow(MissingConfigFileError);
   });
 });

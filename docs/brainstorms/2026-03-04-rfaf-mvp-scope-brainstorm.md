@@ -86,7 +86,7 @@ We chose (1) because the reading engine IS the product. If RSVP doesn't feel gre
 
 ### Phase 8: Distribution
 32. Add a keyboard shortcut within the program to toggle the help overlay, help should show all the keybindings in a very explanatory way, including the runtime controls
-33. Create a github actions workflow to build the project and run the tests, merges to main should trigger the build and run the tests, and if they pass, a new release should be created with the new version number, that includes the compiled binaries for the different platforms, lets start with the version 1.0.0
+33. Create a github actions workflow to build the project and run the tests, merges to main should trigger the build and run the tests, and if they pass, a new release should be created with the new version number, that includes the compiled binaries for the different platforms, lets start with the version 0.0.1
 
 ## Open Questions
 

@@ -43,6 +43,16 @@ export interface LLMConfig {
   maxRetries: number;
 }
 
+export class MissingConfigFileError extends UsageError {
+  readonly configPath: string;
+
+  constructor(configPath: string) {
+    super(`Config error: missing config file at ${configPath}. Create ~/.rfaf/config.yaml.`);
+    this.name = "MissingConfigFileError";
+    this.configPath = configPath;
+  }
+}
+
 function isProvider(value: string): value is LLMProvider {
   return PROVIDERS.includes(value as LLMProvider);
 }
@@ -195,7 +205,7 @@ function resolveValidatedLLMConfig(
   const apiKey = (env[apiKeyEnv] ?? config.llm?.api_key ?? "").trim();
   if (!apiKey) {
     throw new UsageError(
-      `Config error: missing API key for ${providerRaw}. Set ${apiKeyEnv}.`
+      `Config error: missing API key for ${providerRaw}. Set ${apiKeyEnv} or add llm.api_key/llm.api_key_env in config.yaml.`
     );
   }
 
@@ -237,9 +247,13 @@ export function defaultConfigPath(): string {
   return join(homedir(), ".rfaf", "config.yaml");
 }
 
+export function resolveConfigPath(env: Record<string, string | undefined>): string {
+  return env.RFAF_CONFIG_PATH ?? defaultConfigPath();
+}
+
 export function loadLLMConfig(
   env: Record<string, string | undefined>,
-  configPath = env.RFAF_CONFIG_PATH ?? defaultConfigPath()
+  configPath = resolveConfigPath(env)
 ): LLMConfig {
   const legacyPath = join(dirname(configPath), "config.toml");
 
@@ -248,9 +262,7 @@ export function loadLLMConfig(
       throw new UsageError(migrationMessage(configPath, legacyPath));
     }
 
-    throw new UsageError(
-      `Config error: missing config file at ${configPath}. Create ~/.rfaf/config.yaml.`
-    );
+    throw new MissingConfigFileError(configPath);
   }
 
   let parsed: unknown;
