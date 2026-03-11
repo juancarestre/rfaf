@@ -4,7 +4,11 @@
 
 Read Fast As F*ck is a Bun + Ink CLI/TUI app for high-focus, high-speed reading directly in your terminal.
 
+> Use your entire cerebral power to Read Fast As F*ck.
+
 ## Purpose and objective
+
+Use your entire cerebral power to Read Fast As F*ck.
 
 The goal is simple: help you read and retain more in less time, without leaving your flow.
 
