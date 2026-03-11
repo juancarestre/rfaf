@@ -38,7 +38,7 @@ defaults:
   summary_preset: medium
 
   # Request timeout in milliseconds
-  timeout_ms: 20000
+  timeout_ms: 40000
 
   # Retries for transient failures (429/network/5xx)
   max_retries: 1

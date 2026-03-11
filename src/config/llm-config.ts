@@ -5,7 +5,7 @@ import type { SummaryPreset } from "../cli/summary-option";
 import { DEFAULT_SUMMARY_PRESET } from "../cli/summary-option";
 import { UsageError } from "../cli/errors";
 
-export const DEFAULT_SUMMARIZE_TIMEOUT_MS = 20_000;
+export const DEFAULT_SUMMARIZE_TIMEOUT_MS = 40_000;
 export const DEFAULT_SUMMARIZE_MAX_RETRIES = 1;
 export const MAX_SUMMARIZE_TIMEOUT_MS = 60_000;
 export const MAX_SUMMARIZE_RETRIES = 5;
