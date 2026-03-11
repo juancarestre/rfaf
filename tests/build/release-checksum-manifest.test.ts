@@ -91,6 +91,16 @@ describe("release checksum manifest", () => {
     expect(() => collectReleaseArtifacts(dir)).toThrow("Unexpected artifact entry");
   });
 
+  it("ignores known Bun sourcemap sidecar files", () => {
+    const dir = mkdtempSync(join(tmpdir(), "rfaf-checksum-sourcemap-sidecar-"));
+    writeFileSync(join(dir, "rfaf-a"), "artifact A");
+    writeFileSync(join(dir, "index.js.map"), "{}\n");
+    writeCompileManifest(dir, ["rfaf-a"]);
+
+    const artifacts = collectReleaseArtifacts(dir);
+    expect(artifacts.map((item) => item.file)).toEqual(["rfaf-a"]);
+  });
+
   it("fails when compile manifest has no artifacts", () => {
     const dir = mkdtempSync(join(tmpdir(), "rfaf-checksum-empty-"));
     writeCompileManifest(dir, []);

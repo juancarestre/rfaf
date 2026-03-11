@@ -23,6 +23,7 @@ const METADATA_FILES = new Set([
   "SHA256SUMS",
   "release-manifest.json",
 ]);
+const OPTIONAL_SIDE_CAR_FILES = new Set(["index.js.map"]);
 const SAFE_ARTIFACT_FILENAME = /^[A-Za-z0-9._-]+$/;
 
 function assertSafeArtifactName(file: string): void {
@@ -63,6 +64,7 @@ export function collectReleaseArtifacts(outDir: string): ReleaseArtifactChecksum
 
   for (const entry of dirEntries) {
     if (METADATA_FILES.has(entry)) continue;
+    if (OPTIONAL_SIDE_CAR_FILES.has(entry)) continue;
     if (!expectedSet.has(entry)) {
       throw new Error(`Unexpected artifact entry in ${outDir}: ${entry}`);
     }
