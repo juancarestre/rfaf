@@ -365,6 +365,11 @@ async function main() {
       default: DEFAULT_READING_MODE,
       describe: `Reading mode (${READING_MODES.join("|")})`,
     })
+    .group(["wpm", "text-scale", "clipboard", "mode"], "Reading & Input:")
+    .group(
+      ["summary", "no-bs", "translate-to", "key-phrases", "quiz", "strategy"],
+      "AI Processing:"
+    )
     .requiresArg("text-scale")
     .requiresArg("mode")
     .example("$0 https://example.com/article", "Fetch and speed-read a web article")
