@@ -1,7 +1,7 @@
 ---
 title: "feat: Unified Timeout Reliability for LLM Transforms"
 type: feat
-status: active
+status: completed
 date: 2026-03-11
 origin: docs/brainstorms/2026-03-11-rfaf-llm-timeout-reliability-brainstorm.md
 ---
@@ -192,16 +192,16 @@ Refactor only after all tests are green.
 
 ## Acceptance Criteria
 
-- [ ] A single adaptive timeout policy governs `--summary`, `--no-bs`, `--translate-to`, and `--key-phrases` (see brainstorm: `docs/brainstorms/2026-03-11-rfaf-llm-timeout-reliability-brainstorm.md`).
-- [ ] Long-document completion rate improves for all four transforms under bounded runtime caps.
-- [ ] Timeout and retry behavior is deterministic and contract-tested across all transforms.
-- [ ] On persistent timeout in interactive mode, users are offered explicit continue-without-transform choice.
-- [ ] On persistent timeout in non-interactive mode, flow remains non-blocking and emits explicit `[warn]` about skipped transform.
-- [ ] No silent partial-transform output is emitted by default; outcomes remain explicit.
-- [ ] Existing transform order (`no-bs -> summary -> translate -> key-phrases`) remains intact and tested.
-- [ ] CLI and agent contracts remain parity-aligned for timeout/skip outcomes.
-- [ ] All work lands TDD-first (tests first, then implementation).
-- [ ] `bun test` and `bun x tsc --noEmit` pass.
+- [x] A single adaptive timeout policy governs `--summary`, `--no-bs`, `--translate-to`, and `--key-phrases` (see brainstorm: `docs/brainstorms/2026-03-11-rfaf-llm-timeout-reliability-brainstorm.md`).
+- [x] Long-document completion rate improves for all four transforms under bounded runtime caps.
+- [x] Timeout and retry behavior is deterministic and contract-tested across all transforms.
+- [x] On persistent timeout in interactive mode, users are offered explicit continue-without-transform choice.
+- [x] On persistent timeout in non-interactive mode, flow remains non-blocking and emits explicit `[warn]` about skipped transform.
+- [x] No silent partial-transform output is emitted by default; outcomes remain explicit.
+- [x] Existing transform order (`no-bs -> summary -> translate -> key-phrases`) remains intact and tested.
+- [x] CLI and agent contracts remain parity-aligned for timeout/skip outcomes.
+- [x] All work lands TDD-first (tests first, then implementation).
+- [x] `bun test` and `bun x tsc --noEmit` pass.
 
 ## Success Metrics
 

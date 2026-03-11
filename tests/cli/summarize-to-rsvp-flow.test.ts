@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { SummarizeRuntimeError } from "../../src/cli/errors";
 import type { LoadingIndicator } from "../../src/cli/loading-indicator";
 import { summarizeBeforeRsvp } from "../../src/cli/summarize-flow";
 
@@ -130,5 +131,70 @@ describe("summarizeBeforeRsvp", () => {
     }
 
     expect(calls).toEqual(["start", "stop", "fail"]);
+  });
+
+  it("continues without summary when timeout recovery outcome is continue", async () => {
+    const calls: Array<"start" | "stop" | "succeed" | "fail"> = [];
+    const warnings: string[] = [];
+
+    const result = await summarizeBeforeRsvp({
+      documentContent: "original",
+      sourceLabel: "stdin",
+      summaryOption: { enabled: true, preset: "medium" },
+      env: { OPENAI_API_KEY: "test" },
+      loadConfig: () => ({
+        provider: "openai",
+        model: "gpt-5-mini",
+        apiKey: "test",
+        defaultPreset: "medium",
+        timeoutMs: 1_000,
+        maxRetries: 0,
+      }),
+      summarize: async () => {
+        throw new SummarizeRuntimeError(
+          "Summarization failed [timeout]: request timed out.",
+          "timeout"
+        );
+      },
+      createLoading: () => ({
+        start: () => calls.push("start"),
+        stop: () => calls.push("stop"),
+        succeed: () => calls.push("succeed"),
+        fail: () => calls.push("fail"),
+      }),
+      resolveTimeoutOutcome: async () => "continue",
+      writeWarning: (line) => warnings.push(line),
+    });
+
+    expect(result.readingContent).toBe("original");
+    expect(result.sourceLabel).toBe("stdin");
+    expect(warnings).toContain("[warn] summary timed out; continuing without summary transform");
+    expect(calls).toEqual(["start", "stop"]);
+  });
+
+  it("aborts when timeout recovery outcome is abort", async () => {
+    await expect(
+      summarizeBeforeRsvp({
+        documentContent: "original",
+        sourceLabel: "stdin",
+        summaryOption: { enabled: true, preset: "medium" },
+        env: { OPENAI_API_KEY: "test" },
+        loadConfig: () => ({
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          defaultPreset: "medium",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        }),
+        summarize: async () => {
+          throw new SummarizeRuntimeError(
+            "Summarization failed [timeout]: request timed out.",
+            "timeout"
+          );
+        },
+        resolveTimeoutOutcome: async () => "abort",
+      })
+    ).rejects.toThrow("Summarization failed [timeout]");
   });
 });

@@ -259,6 +259,117 @@ describe("agent reader api", () => {
     expect(getAgentReaderState(nextRuntime).keyPhrases).toEqual(["first second"]);
   });
 
+  it("supports explicit timeout continue outcome across agent transform commands", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    const summarizedRuntime = await executeAgentSummarizeCommand(
+      runtime,
+      {
+        preset: "short",
+        sourceLabel: "stdin",
+        timeoutOutcome: "continue",
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async () => {
+        throw new SummarizeRuntimeError("Summarization failed [timeout]: request timed out.", "timeout");
+      }
+    );
+    expect(summarizedRuntime).toBe(runtime);
+
+    const noBsRuntime = await executeAgentNoBsCommand(
+      runtime,
+      {
+        sourceLabel: "stdin",
+        timeoutOutcome: "continue",
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async () => {
+        throw new NoBsRuntimeError("No-BS failed [timeout]: request timed out.", "timeout");
+      },
+      () => "cleaned"
+    );
+    expect(noBsRuntime).toBe(runtime);
+
+    const translatedRuntime = await executeAgentTranslateCommand(
+      runtime,
+      {
+        target: "es",
+        sourceLabel: "stdin",
+        timeoutOutcome: "continue",
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async () => "es",
+      async () => {
+        throw new TranslateRuntimeError("Translation failed [timeout]: request timed out.", "timeout");
+      }
+    );
+    expect(translatedRuntime).toBe(runtime);
+
+    const keyPhrasesRuntime = await executeAgentKeyPhrasesCommand(
+      runtime,
+      {
+        sourceLabel: "stdin",
+        timeoutOutcome: "continue",
+        llmConfig: {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          timeoutMs: 1_000,
+          maxRetries: 0,
+        },
+      },
+      async () => {
+        throw new KeyPhrasesRuntimeError("Key-phrases failed [timeout]: request timed out.", "timeout");
+      }
+    );
+    expect(keyPhrasesRuntime).toBe(runtime);
+  });
+
+  it("fails closed on timeout by default in summarize agent command", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    await expect(
+      executeAgentSummarizeCommand(
+        runtime,
+        {
+          preset: "short",
+          sourceLabel: "stdin",
+          llmConfig: {
+            provider: "openai",
+            model: "gpt-5-mini",
+            apiKey: "test",
+            timeoutMs: 1_000,
+            maxRetries: 0,
+          },
+        },
+        async () => {
+          throw new SummarizeRuntimeError("Summarization failed [timeout]: request timed out.", "timeout");
+        }
+      )
+    ).rejects.toMatchObject({
+      name: "SummarizeRuntimeError",
+      stage: "timeout",
+    });
+  });
+
   it("fails closed for invalid key-phrases list mode payload", async () => {
     const runtime = createAgentReaderRuntime(words(), 320);
 

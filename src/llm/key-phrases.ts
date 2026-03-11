@@ -5,6 +5,11 @@ import { generateObject, type LanguageModel } from "ai";
 import { z } from "zod";
 import { KeyPhrasesRuntimeError } from "../cli/errors";
 import type { LLMProvider } from "../config/llm-config";
+import {
+  createTimeoutDeadline,
+  resolveAdaptiveTimeoutMs,
+  resolveRemainingTimeoutMs,
+} from "./timeout-policy";
 
 const EDGE_PUNCTUATION_REGEX = /^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu;
 
@@ -21,6 +26,7 @@ export interface KeyPhrasesInput {
   timeoutMs: number;
   maxRetries: number;
   signal?: AbortSignal;
+  timeoutDeadlineMs?: number;
 }
 
 export type KeyPhrasesGenerator = (input: {
@@ -208,6 +214,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const RETRY_GUARD_MS = 150;
+
 export function buildKeyPhrasesPrompt(input: string, maxPhrases: number): string {
   return [
     "Extract key phrases for speed reading guidance.",
@@ -253,13 +261,25 @@ export async function extractKeyPhrasesWithGenerator(
 ): Promise<string[]> {
   const model = createModel(input.provider, input.model, input.apiKey);
   const prompt = buildKeyPhrasesPrompt(input.input, input.maxPhrases);
+  const timeoutDeadlineMs =
+    input.timeoutDeadlineMs ??
+    createTimeoutDeadline(resolveAdaptiveTimeoutMs(input.timeoutMs, input.input));
 
   let attempt = 0;
   let lastError: unknown;
 
   while (attempt <= input.maxRetries) {
+    const remainingTimeoutMs = resolveRemainingTimeoutMs(timeoutDeadlineMs);
+    if (remainingTimeoutMs <= 0) {
+      lastError = new KeyPhrasesRuntimeError(
+        "Key-phrases failed [timeout]: request timed out.",
+        "timeout"
+      );
+      break;
+    }
+
     try {
-      const { signal, dispose } = mergedAbortSignal(input.timeoutMs, input.signal);
+      const { signal, dispose } = mergedAbortSignal(Math.max(1, remainingTimeoutMs), input.signal);
       const result = await generate({
         model,
         schema: KeyPhrasesResponseSchema,
@@ -275,6 +295,10 @@ export async function extractKeyPhrasesWithGenerator(
         );
       }
 
+      if (resolveRemainingTimeoutMs(timeoutDeadlineMs) <= 0) {
+        throw new KeyPhrasesRuntimeError("Key-phrases failed [timeout]: request timed out.", "timeout");
+      }
+
       return validateGroundedPhrases(normalized, input.input);
     } catch (error: unknown) {
       if (error instanceof KeyPhrasesRuntimeError) {
@@ -286,7 +310,17 @@ export async function extractKeyPhrasesWithGenerator(
         break;
       }
 
-      await sleep(getRetryDelayMs(attempt));
+      const retryRemainingMs = resolveRemainingTimeoutMs(timeoutDeadlineMs);
+      if (retryRemainingMs <= RETRY_GUARD_MS) {
+        break;
+      }
+
+      const delayMs = Math.min(getRetryDelayMs(attempt), Math.max(0, retryRemainingMs - RETRY_GUARD_MS));
+      if (delayMs <= 0) {
+        break;
+      }
+
+      await sleep(delayMs);
       attempt += 1;
     }
   }

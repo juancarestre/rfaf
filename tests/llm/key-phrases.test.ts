@@ -113,6 +113,40 @@ describe("key-phrases llm", () => {
     ).rejects.toThrow("[timeout]");
   });
 
+  it("enforces one global timeout budget across retries", async () => {
+    let calls = 0;
+
+    await expect(
+      extractKeyPhrasesWithGenerator(
+        {
+          provider: "openai",
+          model: "gpt-4o-mini",
+          apiKey: "test",
+          input: "Alpha beta gamma",
+          maxPhrases: 8,
+          timeoutMs: 1,
+          maxRetries: 2,
+        },
+        async ({ abortSignal }) => {
+          calls += 1;
+          await new Promise<void>((_, reject) => {
+            abortSignal.addEventListener(
+              "abort",
+              () => {
+                reject(new Error("timeout"));
+              },
+              { once: true }
+            );
+          });
+
+          return { object: { phrases: ["should not happen"] } };
+        }
+      )
+    ).rejects.toThrow("[timeout]");
+
+    expect(calls).toBe(1);
+  });
+
   it("fails closed when extracted phrases are not grounded in source text", async () => {
     await expect(
       extractKeyPhrasesWithGenerator(

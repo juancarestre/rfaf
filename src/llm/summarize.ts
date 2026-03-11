@@ -13,6 +13,11 @@ import {
   splitIntoLongInputChunks,
 } from "./long-input-chunking";
 import { mergeLongInputChunks } from "./long-input-merge";
+import {
+  createTimeoutDeadline,
+  resolveAdaptiveTimeoutMs,
+  resolveRemainingTimeoutMs,
+} from "./timeout-policy";
 
 export const MAX_SUMMARY_BYTES = 512 * 1024;
 
@@ -378,12 +383,16 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const RETRY_GUARD_MS = 150;
+
 export async function summarizeTextWithGenerator(
   input: SummarizeInput,
   generate: StructuredGenerator
 ): Promise<string> {
   const model = createModel(input.provider, input.model, input.apiKey);
-  const timeoutDeadlineMs = Date.now() + input.timeoutMs;
+  const timeoutDeadlineMs = createTimeoutDeadline(
+    resolveAdaptiveTimeoutMs(input.timeoutMs, input.input)
+  );
 
   const runSinglePass = async (
     sourceText: string,
@@ -394,7 +403,7 @@ export async function summarizeTextWithGenerator(
     let lastError: unknown;
 
     while (attempt <= input.maxRetries) {
-      const remainingTimeoutMs = timeoutDeadlineMs - Date.now();
+      const remainingTimeoutMs = resolveRemainingTimeoutMs(timeoutDeadlineMs);
       if (remainingTimeoutMs <= 0) {
         lastError = new SummarizeRuntimeError(
           "Summarization failed [timeout]: request timed out.",
@@ -460,7 +469,17 @@ export async function summarizeTextWithGenerator(
           break;
         }
 
-        await sleep(getRetryDelayMs(attempt));
+        const retryRemainingMs = resolveRemainingTimeoutMs(timeoutDeadlineMs);
+        if (retryRemainingMs <= RETRY_GUARD_MS) {
+          break;
+        }
+
+        const delayMs = Math.min(getRetryDelayMs(attempt), Math.max(0, retryRemainingMs - RETRY_GUARD_MS));
+        if (delayMs <= 0) {
+          break;
+        }
+
+        await sleep(delayMs);
         attempt += 1;
       }
     }

@@ -6,6 +6,11 @@ import { z } from "zod";
 import type { LLMProvider } from "../config/llm-config";
 import { assertInputWithinLimit } from "../ingest/constants";
 import { TranslateRuntimeError } from "../cli/errors";
+import {
+  createTimeoutDeadline,
+  resolveAdaptiveTimeoutMs,
+  resolveRemainingTimeoutMs,
+} from "./timeout-policy";
 
 export const MAX_TRANSLATE_BYTES = 512 * 1024;
 
@@ -61,6 +66,7 @@ export interface TranslateInput {
   timeoutMs: number;
   maxRetries: number;
   signal?: AbortSignal;
+  timeoutDeadlineMs?: number;
 }
 
 export type TranslateGenerator = (input: {
@@ -324,6 +330,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const RETRY_GUARD_MS = 150;
+
 function mergedAbortSignal(
   timeoutMs: number,
   parentSignal?: AbortSignal
@@ -360,13 +368,22 @@ export async function translateTextWithGenerator(
 
   const model = createModel(input.provider, input.model, input.apiKey);
   const prompt = buildTranslatePrompt(input.input, input.targetLanguage);
+  const timeoutDeadlineMs =
+    input.timeoutDeadlineMs ??
+    createTimeoutDeadline(resolveAdaptiveTimeoutMs(input.timeoutMs, input.input));
 
   let attempt = 0;
   let lastError: unknown;
 
   while (attempt <= input.maxRetries) {
+    const remainingTimeoutMs = resolveRemainingTimeoutMs(timeoutDeadlineMs);
+    if (remainingTimeoutMs <= 0) {
+      lastError = new TranslateRuntimeError("Translation failed [timeout]: request timed out.", "timeout");
+      break;
+    }
+
     try {
-      const { signal, dispose } = mergedAbortSignal(input.timeoutMs, input.signal);
+      const { signal, dispose } = mergedAbortSignal(Math.max(1, remainingTimeoutMs), input.signal);
       const result = await generate({
         model,
         schema: TranslateResponseSchema,
@@ -396,6 +413,10 @@ export async function translateTextWithGenerator(
         );
       }
 
+      if (resolveRemainingTimeoutMs(timeoutDeadlineMs) <= 0) {
+        throw new TranslateRuntimeError("Translation failed [timeout]: request timed out.", "timeout");
+      }
+
       assertInputWithinLimit(Buffer.byteLength(normalized, "utf8"), MAX_TRANSLATE_BYTES);
       return normalized;
     } catch (error: unknown) {
@@ -404,7 +425,17 @@ export async function translateTextWithGenerator(
         break;
       }
 
-      await sleep(getRetryDelayMs(attempt));
+      const retryRemainingMs = resolveRemainingTimeoutMs(timeoutDeadlineMs);
+      if (retryRemainingMs <= RETRY_GUARD_MS) {
+        break;
+      }
+
+      const delayMs = Math.min(getRetryDelayMs(attempt), Math.max(0, retryRemainingMs - RETRY_GUARD_MS));
+      if (delayMs <= 0) {
+        break;
+      }
+
+      await sleep(delayMs);
       attempt += 1;
     }
   }

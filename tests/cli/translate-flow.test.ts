@@ -138,4 +138,79 @@ describe("translateBeforeRsvp", () => {
     expect(result.readingContent.split("\n\n").length).toBe(calls.length);
     expect(result.sourceLabel).toBe("stdin (translated:es)");
   });
+
+  it("shares one timeout deadline across translated chunks", async () => {
+    const deadlines = new Set<number>();
+    const timeoutBudgets = new Set<number>();
+    const longText = `${"alpha beta gamma delta epsilon ".repeat(3500)}\n\n${
+      "zeta eta theta iota kappa ".repeat(3500)
+    }`;
+
+    await translateBeforeRsvp({
+      documentContent: longText,
+      sourceLabel: "stdin",
+      translateOption: { enabled: true, target: "es" },
+      env: {
+        OPENAI_API_KEY: "test",
+      },
+      loadConfig: () => ({
+        provider: "openai",
+        model: "gpt-4o-mini",
+        apiKey: "test",
+        defaultPreset: "medium",
+        timeoutMs: 1_000,
+        maxRetries: 0,
+      }),
+      normalizeTarget: async () => "es",
+      translate: async ({ timeoutDeadlineMs, timeoutMs, input }) => {
+        if (typeof timeoutDeadlineMs === "number") {
+          deadlines.add(timeoutDeadlineMs);
+        }
+        timeoutBudgets.add(timeoutMs);
+        return `tr:${input.slice(0, 12)}`;
+      },
+    });
+
+    expect(deadlines.size).toBe(1);
+    expect([...timeoutBudgets][0]).toBeGreaterThan(1_000);
+  });
+
+  it("continues without translation when timeout recovery outcome is continue", async () => {
+    const calls: Array<"start" | "stop" | "succeed" | "fail"> = [];
+    const warnings: string[] = [];
+
+    const result = await translateBeforeRsvp({
+      documentContent: "This is source text.",
+      sourceLabel: "stdin",
+      translateOption: { enabled: true, target: "es" },
+      env: {
+        OPENAI_API_KEY: "test",
+      },
+      loadConfig: () => ({
+        provider: "openai",
+        model: "gpt-4o-mini",
+        apiKey: "test",
+        defaultPreset: "medium",
+        timeoutMs: 1_000,
+        maxRetries: 0,
+      }),
+      createLoading: () => ({
+        start: () => calls.push("start"),
+        stop: () => calls.push("stop"),
+        succeed: () => calls.push("succeed"),
+        fail: () => calls.push("fail"),
+      }),
+      normalizeTarget: async () => "es",
+      translate: async () => {
+        throw new TranslateRuntimeError("Translation failed [timeout]: request timed out.", "timeout");
+      },
+      resolveTimeoutOutcome: async () => "continue",
+      writeWarning: (line) => warnings.push(line),
+    });
+
+    expect(result.readingContent).toBe("This is source text.");
+    expect(result.sourceLabel).toBe("stdin");
+    expect(warnings).toContain("[warn] translation timed out; continuing without translation transform");
+    expect(calls).toEqual(["start", "stop"]);
+  });
 });

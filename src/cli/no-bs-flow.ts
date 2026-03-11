@@ -5,6 +5,10 @@ import { sanitizeTerminalText } from "../ui/sanitize-terminal-text";
 import { createLoadingIndicator, type LoadingIndicator } from "./loading-indicator";
 import { NoBsRuntimeError } from "./errors";
 import type { NoBsOption } from "./no-bs-option";
+import {
+  resolveTimeoutRecoveryOutcome,
+  type TimeoutRecoveryOutcome,
+} from "./timeout-recovery";
 
 export interface NoBsFlowInput {
   documentContent: string;
@@ -15,6 +19,13 @@ export interface NoBsFlowInput {
   runNoBs?: typeof noBsText;
   createLoading?: (message: string) => LoadingIndicator;
   cleanText?: typeof applyDeterministicNoBs;
+  resolveTimeoutOutcome?: (input: {
+    transformLabel: string;
+    isInteractive: boolean;
+    allowNonInteractiveContinue?: boolean;
+  }) => Promise<TimeoutRecoveryOutcome>;
+  isInteractive?: boolean;
+  writeWarning?: (line: string) => void;
 }
 
 export interface NoBsFlowOutput {
@@ -34,6 +45,14 @@ export async function noBsBeforeRsvp(input: NoBsFlowInput): Promise<NoBsFlowOutp
   const resolveConfig = input.loadConfig ?? loadLLMConfig;
   const runNoBs = input.runNoBs ?? noBsText;
   const cleanText = input.cleanText ?? applyDeterministicNoBs;
+  const resolveTimeoutOutcome = input.resolveTimeoutOutcome ?? resolveTimeoutRecoveryOutcome;
+  const isInteractive = input.isInteractive ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  const allowNonInteractiveContinue = env.RFAF_TIMEOUT_CONTINUE === "1";
+  const writeWarning =
+    input.writeWarning ??
+    ((line: string) => {
+      process.stderr.write(`${sanitizeTerminalText(line)}\n`);
+    });
   const cleaned = cleanText(input.documentContent);
 
   if (!cleaned.trim()) {
@@ -59,11 +78,13 @@ export async function noBsBeforeRsvp(input: NoBsFlowInput): Promise<NoBsFlowOutp
   const onSigInt = () => {
     abortController.abort(new Error("SIGINT"));
   };
+  let sigIntRegistered = false;
 
   let loadingStarted = false;
 
   try {
     process.once("SIGINT", onSigInt);
+    sigIntRegistered = true;
     loading.start();
     loadingStarted = true;
 
@@ -92,12 +113,37 @@ export async function noBsBeforeRsvp(input: NoBsFlowInput): Promise<NoBsFlowOutp
       sourceLabel: `${input.sourceLabel} (no-bs)`,
     };
   } catch (error: unknown) {
-    if (loadingStarted) {
-      loading.stop();
-      loading.fail("no-bs failed");
-    }
-
     if (error instanceof NoBsRuntimeError) {
+      if (error.stage === "timeout") {
+        if (sigIntRegistered) {
+          process.removeListener("SIGINT", onSigInt);
+          sigIntRegistered = false;
+        }
+
+        const outcome = await resolveTimeoutOutcome({
+          transformLabel: "no-bs",
+          isInteractive,
+          allowNonInteractiveContinue,
+        });
+
+        if (outcome === "continue") {
+          if (loadingStarted) {
+            loading.stop();
+          }
+
+          writeWarning("[warn] no-bs timed out; continuing without no-bs transform");
+          return {
+            readingContent: input.documentContent,
+            sourceLabel: input.sourceLabel,
+          };
+        }
+      }
+
+      if (loadingStarted) {
+        loading.stop();
+        loading.fail("no-bs failed");
+      }
+
       const provider = sanitizeTerminalText(llmConfig.provider);
       const model = sanitizeTerminalText(llmConfig.model);
       throw new NoBsRuntimeError(
@@ -107,11 +153,17 @@ export async function noBsBeforeRsvp(input: NoBsFlowInput): Promise<NoBsFlowOutp
     }
 
     const message = error instanceof Error ? error.message : String(error);
+    if (loadingStarted) {
+      loading.stop();
+      loading.fail("no-bs failed");
+    }
     throw new NoBsRuntimeError(
       `No-BS failed [runtime]: ${sanitizeTerminalText(message)}`,
       "runtime"
     );
   } finally {
-    process.removeListener("SIGINT", onSigInt);
+    if (sigIntRegistered) {
+      process.removeListener("SIGINT", onSigInt);
+    }
   }
 }

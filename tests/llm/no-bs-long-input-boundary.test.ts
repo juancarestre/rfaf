@@ -92,12 +92,12 @@ describe("no-bs long-input boundary", () => {
             model: "gpt-4o-mini",
             apiKey: "test",
             input: source,
-            timeoutMs: 100,
+            timeoutMs: 30,
             maxRetries: 0,
           },
           async ({ prompt }) => {
             calls += 1;
-            simulatedNow += 80;
+            simulatedNow += 40;
             return { object: { cleaned_text: extractSource(prompt) } };
           }
         )
