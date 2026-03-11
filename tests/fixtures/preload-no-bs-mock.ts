@@ -60,6 +60,12 @@ const mockedFetch = Object.assign(
       return buildResponse("This cleaned text is translated into English and violates language contract.");
     }
 
+  if (scenario === "content-truncation") {
+    return buildResponse(
+      "Black Sabbath was an English rock band formed in Birmingham in 1968 by guitarist Tony Iommi and bassist Geezer Butler."
+    );
+  }
+
     return buildResponse("Texto limpio en espanol que mantiene el idioma original.");
   },
   {

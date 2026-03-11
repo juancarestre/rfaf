@@ -145,4 +145,35 @@ describe("summary CLI contract", () => {
     expect(result.stderr).toContain("[error] summarization failed");
     expect(result.stderr).toContain("language preservation check failed");
   });
+
+  it("fails closed when summary violates proportional preset bounds", () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "rfaf-summary-length-contract-"));
+    const rfafDir = join(homeDir, ".rfaf");
+    mkdirSync(rfafDir, { recursive: true });
+    writeFileSync(
+      join(rfafDir, "config.yaml"),
+      [
+        "llm:",
+        "  provider: openai",
+        "  model: gpt-4o-mini",
+        "defaults:",
+        "  timeout_ms: 5000",
+        "  max_retries: 0",
+      ].join("\n")
+    );
+
+    const result = runCliWithPreload(
+      "./tests/fixtures/preload-summary-mock.ts",
+      ["--summary=short", "tests/fixtures/ozzy.txt"],
+      {
+        HOME: homeDir,
+        OPENAI_API_KEY: "dummy",
+        RFAF_SUMMARY_MOCK_SCENARIO: "length-mismatch",
+      }
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("[error] summarization failed");
+    expect(result.stderr).toContain("summary length check failed");
+  });
 });

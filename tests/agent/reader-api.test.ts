@@ -664,6 +664,36 @@ describe("agent reader api", () => {
     ).rejects.toThrow("provider=openai");
   });
 
+  it("surfaces deterministic proportional-length summarize failure for agent parity", async () => {
+    const runtime = createAgentReaderRuntime(words(), 320);
+
+    await expect(
+      executeAgentSummarizeCommand(
+        runtime,
+        {
+          preset: "short",
+          sourceLabel: "stdin",
+          llmConfig: {
+            provider: "openai",
+            model: "gpt-5-mini",
+            apiKey: "test",
+            timeoutMs: 1_000,
+            maxRetries: 0,
+          },
+        },
+        async () => {
+          throw new SummarizeRuntimeError(
+            "Summarization failed [schema]: summary length check failed; output is outside the preset proportional bounds.",
+            "schema"
+          );
+        }
+      )
+    ).rejects.toMatchObject({
+      name: "SummarizeRuntimeError",
+      stage: "schema",
+    });
+  });
+
   it("supports URL ingest through agent API with runtime defaults/overrides", async () => {
     const result = await executeAgentIngestUrlCommand(
       {
