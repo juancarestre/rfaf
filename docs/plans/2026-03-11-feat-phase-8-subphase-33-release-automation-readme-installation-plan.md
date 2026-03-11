@@ -1,7 +1,7 @@
 ---
 title: "feat: Phase 8.33 automated releases and platform install docs"
 type: feat
-status: active
+status: completed
 date: 2026-03-11
 origin: docs/brainstorms/2026-03-11-phase-8-subphase-33-release-automation-readme-installation-brainstorm.md
 ---
@@ -155,16 +155,16 @@ CLI behavior remains unchanged; this phase affects distribution/ops/docs surface
 
 ## Acceptance Criteria
 
-- [ ] A GitHub Actions workflow exists and runs on merges to `main` (see brainstorm: origin file).
-- [ ] Workflow runs `bun test` and `bun x tsc --noEmit` before release steps.
-- [ ] Workflow compiles all existing platform targets using repo scripts.
-- [ ] Workflow generates and publishes `SHA256SUMS` and `release-manifest.json` with binaries.
-- [ ] Publish behavior is deterministic and idempotent for reruns.
-- [ ] Workflow enforces concurrency policy for release jobs.
-- [ ] `README.md` presents prebuilt-binary install as primary onboarding for macOS/Linux/Windows (see brainstorm: origin file).
-- [ ] `README.md` keeps Bun/source installation as secondary path (see brainstorm: origin file).
-- [ ] README platform commands correspond to real artifact names/output.
-- [ ] Package-manager distribution is explicitly out of scope for this phase (see brainstorm: origin file).
+- [x] A GitHub Actions workflow exists and runs on merges to `main` (see brainstorm: origin file).
+- [x] Workflow runs `bun test` and `bun x tsc --noEmit` before release steps.
+- [x] Workflow compiles all existing platform targets using repo scripts.
+- [x] Workflow generates and publishes `SHA256SUMS` and `release-manifest.json` with binaries.
+- [x] Publish behavior is deterministic and idempotent for reruns.
+- [x] Workflow enforces concurrency policy for release jobs.
+- [x] `README.md` presents prebuilt-binary install as primary onboarding for macOS/Linux/Windows (see brainstorm: origin file).
+- [x] `README.md` keeps Bun/source installation as secondary path (see brainstorm: origin file).
+- [x] README platform commands correspond to real artifact names/output.
+- [x] Package-manager distribution is explicitly out of scope for this phase (see brainstorm: origin file).
 
 ## Success Metrics
 
