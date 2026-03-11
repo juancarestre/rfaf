@@ -17,7 +17,7 @@ describe("release workflow contract", () => {
     const workflow = readReleaseWorkflow();
     expect(workflow).toContain("bun test");
     expect(workflow).toContain("bun x tsc --noEmit");
-    expect(workflow).toContain("bun run build:compile");
+    expect(workflow).toContain("bun run build:compile --version");
     expect(workflow).toContain("bun run release:checksums --dir dist/bin");
     expect(workflow).toContain("bun run release:package --bin-dir dist/bin --out-dir dist/release");
   });

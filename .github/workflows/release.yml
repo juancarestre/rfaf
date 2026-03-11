@@ -34,15 +34,6 @@ jobs:
       - name: Run typecheck
         run: bun x tsc --noEmit
 
-      - name: Build compiled binaries
-        run: bun run build:compile
-
-      - name: Generate checksums and release manifest
-        run: bun run release:checksums --dir dist/bin
-
-      - name: Package release assets
-        run: bun run release:package --bin-dir dist/bin --out-dir dist/release --install-script install.sh
-
       - name: Resolve release metadata
         id: release_meta
         env:
@@ -80,6 +71,15 @@ jobs:
 
           echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "tag=${next_tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Build compiled binaries
+        run: bun run build:compile --version "${{ steps.release_meta.outputs.tag }}"
+
+      - name: Generate checksums and release manifest
+        run: bun run release:checksums --dir dist/bin
+
+      - name: Package release assets
+        run: bun run release:package --bin-dir dist/bin --out-dir dist/release --install-script install.sh
 
       - name: Create draft release
         if: steps.release_meta.outputs.skip != 'true'

@@ -145,13 +145,18 @@ export function compileArtifacts(options: CompileOptions): CompilePlan[] {
 function parseArgs(args: string[], packageVersion: string): CompileOptions {
   const hasCurrentOnly = args.includes("--current");
   const outDirFlagIndex = args.indexOf("--out-dir");
+  const versionFlagIndex = args.indexOf("--version");
   const outDir =
     outDirFlagIndex >= 0 && args[outDirFlagIndex + 1]
       ? args[outDirFlagIndex + 1]
       : DEFAULT_OUT_DIR;
+  const versionRaw =
+    versionFlagIndex >= 0 && args[versionFlagIndex + 1]
+      ? args[versionFlagIndex + 1]
+      : packageVersion;
 
   return {
-    version: normalizeVersion(packageVersion),
+    version: normalizeVersion(versionRaw),
     outDir,
     currentOnly: hasCurrentOnly,
     cwd: process.cwd(),

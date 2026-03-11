@@ -42,6 +42,17 @@ resolve_tag() {
   printf "%s\n" "$latest_tag"
 }
 
+resolve_archive_name_for_target() {
+  release_json=$(curl -fsSL "${GITHUB_API_URL}/releases/tags/${1}")
+  archive_name=$(printf "%s\n" "$release_json" | sed -n "s/.*\"name\":[[:space:]]*\"\([^\"]*-${2}\\.tar\\.gz\)\".*/\1/p" | head -n1)
+
+  if [ "$archive_name" = "" ]; then
+    fail "No archive found for target ${2} in release ${1}"
+  fi
+
+  printf "%s\n" "$archive_name"
+}
+
 resolve_target() {
   os_name=$(uname -s)
   arch_name=$(uname -m)
@@ -120,8 +131,8 @@ need_cmd mktemp
 
 TAG=$(resolve_tag "${1:-}")
 TARGET=$(resolve_target)
-ARTIFACT_BASENAME="rfaf-${TAG}-${TARGET}"
-ARCHIVE_NAME="${ARTIFACT_BASENAME}.tar.gz"
+ARCHIVE_NAME=$(resolve_archive_name_for_target "$TAG" "$TARGET")
+ARTIFACT_BASENAME=${ARCHIVE_NAME%.tar.gz}
 
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT INT TERM
