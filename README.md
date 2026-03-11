@@ -36,27 +36,52 @@ Common pain points:
 
 ### 1) Install prebuilt binaries (recommended)
 
-Pick a release tag from https://github.com/juancarestre/rfaf/releases (example: `v0.0.1`).
+Pick a release tag from https://github.com/juancarestre/rfaf/releases (example: `v0.1.0`).
+
+#### macOS/Linux one-line installer (recommended)
+
+Latest release:
+
+```bash
+curl -fsSL "https://github.com/juancarestre/rfaf/releases/latest/download/install.sh" | sh
+```
+
+Specific tag:
+
+```bash
+TAG="v0.1.0"
+curl -fsSL -o install-rfaf.sh "https://github.com/juancarestre/rfaf/releases/download/${TAG}/install.sh"
+sh install-rfaf.sh "${TAG}"
+rfaf --help
+```
+
+By default, installer target is `/usr/local/bin/rfaf`, with fallback to `~/.local/bin/rfaf` if `/usr/local/bin` is not writable.
+
+#### Manual install from tar.gz archives
 
 #### macOS
 
 Apple Silicon (arm64):
 
 ```bash
-TAG="v0.0.1"
-curl -fL -o rfaf "https://github.com/juancarestre/rfaf/releases/download/${TAG}/rfaf-${TAG}-bun-darwin-arm64"
+TAG="v0.1.0"
+curl -fL -O "https://github.com/juancarestre/rfaf/releases/download/${TAG}/rfaf-${TAG}-bun-darwin-arm64.tar.gz"
+tar -xzf "rfaf-${TAG}-bun-darwin-arm64.tar.gz"
 chmod +x rfaf
 sudo mv rfaf /usr/local/bin/rfaf
+xattr -d com.apple.quarantine /usr/local/bin/rfaf 2>/dev/null || true
 rfaf --help
 ```
 
 Intel (x64):
 
 ```bash
-TAG="v0.0.1"
-curl -fL -o rfaf "https://github.com/juancarestre/rfaf/releases/download/${TAG}/rfaf-${TAG}-bun-darwin-x64"
+TAG="v0.1.0"
+curl -fL -O "https://github.com/juancarestre/rfaf/releases/download/${TAG}/rfaf-${TAG}-bun-darwin-x64.tar.gz"
+tar -xzf "rfaf-${TAG}-bun-darwin-x64.tar.gz"
 chmod +x rfaf
 sudo mv rfaf /usr/local/bin/rfaf
+xattr -d com.apple.quarantine /usr/local/bin/rfaf 2>/dev/null || true
 rfaf --help
 ```
 
@@ -65,8 +90,9 @@ rfaf --help
 ARM64:
 
 ```bash
-TAG="v0.0.1"
-curl -fL -o rfaf "https://github.com/juancarestre/rfaf/releases/download/${TAG}/rfaf-${TAG}-bun-linux-arm64"
+TAG="v0.1.0"
+curl -fL -O "https://github.com/juancarestre/rfaf/releases/download/${TAG}/rfaf-${TAG}-bun-linux-arm64.tar.gz"
+tar -xzf "rfaf-${TAG}-bun-linux-arm64.tar.gz"
 chmod +x rfaf
 sudo mv rfaf /usr/local/bin/rfaf
 rfaf --help
@@ -75,8 +101,9 @@ rfaf --help
 x64:
 
 ```bash
-TAG="v0.0.1"
-curl -fL -o rfaf "https://github.com/juancarestre/rfaf/releases/download/${TAG}/rfaf-${TAG}-bun-linux-x64-baseline"
+TAG="v0.1.0"
+curl -fL -O "https://github.com/juancarestre/rfaf/releases/download/${TAG}/rfaf-${TAG}-bun-linux-x64-baseline.tar.gz"
+tar -xzf "rfaf-${TAG}-bun-linux-x64-baseline.tar.gz"
 chmod +x rfaf
 sudo mv rfaf /usr/local/bin/rfaf
 rfaf --help
@@ -85,9 +112,10 @@ rfaf --help
 #### Windows (PowerShell)
 
 ```powershell
-$Tag = "v0.0.1"
-$Asset = "rfaf-$Tag-bun-windows-x64-baseline.exe"
-Invoke-WebRequest -Uri "https://github.com/juancarestre/rfaf/releases/download/$Tag/$Asset" -OutFile "rfaf.exe"
+$Tag = "v0.1.0"
+$Archive = "rfaf-$Tag-bun-windows-x64-baseline.exe.tar.gz"
+Invoke-WebRequest -Uri "https://github.com/juancarestre/rfaf/releases/download/$Tag/$Archive" -OutFile $Archive
+tar -xzf $Archive
 .\rfaf.exe --help
 ```
 
@@ -98,7 +126,7 @@ To run from any terminal, move `rfaf.exe` to a directory already on your `PATH`,
 Download `SHA256SUMS` from the same release:
 
 ```bash
-TAG="v0.0.1"
+TAG="v0.1.0"
 curl -fL -o SHA256SUMS "https://github.com/juancarestre/rfaf/releases/download/${TAG}/SHA256SUMS"
 ```
 
@@ -106,7 +134,7 @@ macOS/Linux verify example:
 
 ```bash
 shasum -a 256 rfaf
-grep "rfaf-${TAG}" SHA256SUMS
+grep "rfaf-${TAG}-bun" SHA256SUMS
 ```
 
 Windows verify example:

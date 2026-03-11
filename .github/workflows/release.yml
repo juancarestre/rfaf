@@ -40,6 +40,9 @@ jobs:
       - name: Generate checksums and release manifest
         run: bun run release:checksums --dir dist/bin
 
+      - name: Package release assets
+        run: bun run release:package --bin-dir dist/bin --out-dir dist/release --install-script install.sh
+
       - name: Resolve release metadata
         id: release_meta
         env:
@@ -94,7 +97,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${{ steps.release_meta.outputs.tag }}"
-          gh release upload "${TAG}" dist/bin/*
+          gh release upload "${TAG}" dist/release/*
 
       - name: Publish release
         if: steps.release_meta.outputs.skip != 'true'

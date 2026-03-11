@@ -19,6 +19,7 @@ describe("release workflow contract", () => {
     expect(workflow).toContain("bun x tsc --noEmit");
     expect(workflow).toContain("bun run build:compile");
     expect(workflow).toContain("bun run release:checksums --dir dist/bin");
+    expect(workflow).toContain("bun run release:package --bin-dir dist/bin --out-dir dist/release");
   });
 
   it("enforces release concurrency and idempotency checks", () => {
@@ -32,6 +33,6 @@ describe("release workflow contract", () => {
   it("publishes release assets with gh release create", () => {
     const workflow = readReleaseWorkflow();
     expect(workflow).toContain("gh release create");
-    expect(workflow).toContain("dist/bin/*");
+    expect(workflow).toContain("dist/release/*");
   });
 });

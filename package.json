@@ -12,6 +12,7 @@
     "build:compile": "bun run scripts/build/compile-rfaf.ts",
     "build:compile:current": "bun run scripts/build/compile-rfaf.ts --current",
     "release:checksums": "bun run scripts/release/generate-checksums.ts",
+    "release:package": "bun run scripts/release/package-artifacts.ts",
     "spike:ink": "bun run scripts/ink-spike.tsx",
     "test": "bun test",
     "test:watch": "bun test --watch"
