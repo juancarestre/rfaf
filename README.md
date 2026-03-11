@@ -1,4 +1,5 @@
 ![Read Fast as F*ck](docs/readfastasfckyeah.png)
+![rfaf demo](docs/rfaf.gif)
 
 # rfaf
 
