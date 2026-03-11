@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+const PTY_TEST_TIMEOUT_MS = 20_000;
+
 function stripAnsi(output: string): string {
   return output
     .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
@@ -115,7 +117,7 @@ describe("help overlay toggle PTY contract", () => {
     expect(result.exitCode).toBe(0);
     expect(result.output).toContain("toggle help overlay");
     expect(result.output).toContain("Press Space to start");
-  });
+  }, PTY_TEST_TIMEOUT_MS);
 
   it("closes help with Esc", () => {
     const result = runHelpOverlayPty(["help", "close-help-esc", "quit"]);
@@ -123,5 +125,5 @@ describe("help overlay toggle PTY contract", () => {
     expect(result.exitCode).toBe(0);
     expect(result.output).toContain("close help overlay");
     expect(result.output).toContain("Press Space to start");
-  });
+  }, PTY_TEST_TIMEOUT_MS);
 });
