@@ -320,7 +320,14 @@ function violatesContentPreservation(source: string, cleaned: string): boolean {
 
   const cleanedBytes = Buffer.byteLength(cleanedTrimmed, "utf8");
   const byteRatio = cleanedBytes / sourceBytes;
-  if (byteRatio < 0.2) {
+  const minimumByteRatio = sourceBytes >= 8_000 ? 0.35 : 0.2;
+  if (byteRatio < minimumByteRatio) {
+    return true;
+  }
+
+  const sourceTokenCount = tokenizeTokens(sourceTrimmed).length;
+  const cleanedTokenCount = tokenizeTokens(cleanedTrimmed).length;
+  if (sourceTokenCount >= 1_200 && cleanedTokenCount / sourceTokenCount < 0.4) {
     return true;
   }
 

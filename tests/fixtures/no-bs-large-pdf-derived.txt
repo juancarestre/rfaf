@@ -1,0 +1,20 @@
+Las notas de este documento provienen de una transcripcion extensa de un PDF escaneado y corregido.
+El objetivo es conservar todo el contenido util aunque el texto original incluya saltos de linea irregulares.
+En la primera seccion se describe un experimento perceptivo con observaciones cronologicas y comentarios laterales.
+La segunda seccion amplia el contexto historico, menciona fechas, y conecta hallazgos con autores anteriores.
+Tambien hay referencias cruzadas a capitulos, anexos y citas que no deben perderse durante la limpieza.
+Cuando se eliminan detalles, se rompe la continuidad argumental y aparecen conclusiones que no existen en la fuente.
+
+La transcripcion incluye parrafos largos, frases cortas, y repeticiones utiles para validar consistencia.
+Algunas lineas contienen ruido editorial como encabezados redundantes y marcas visuales del proceso OCR.
+Sin embargo, esos elementos no justifican resumir la narrativa central ni reducirla a un unico parrafo.
+Cada bloque aporta contexto sobre causas, efectos, y limites metodologicos reportados por el autor.
+La preservacion de fechas, lugares y actores es esencial para evitar distorsiones factuales.
+Un sistema robusto debe retirar ruido superficial y mantener intacto el hilo completo del texto.
+
+En pruebas anteriores, ciertas salidas parecian correctas a primera vista pero omitian partes extensas.
+Ese tipo de omision silenciosa es inaceptable porque produce confianza falsa en resultados incompletos.
+Por esta razon, el contrato de no-bs exige una salida completa o un fallo tipado y determinista.
+No se permite devolver fragmentos parciales como exito, ni reemplazar contenido con reformulaciones breves.
+Este fixture sirve para confirmar que los controles detectan truncamiento en entradas largas derivadas de PDF.
+Tambien verifica que la estructura en multiples parrafos se mantenga en la salida final cuando hay exito.

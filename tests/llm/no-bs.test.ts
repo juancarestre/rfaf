@@ -1,10 +1,20 @@
 import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   buildNoBsPrompt,
   NoBsResponseSchema,
   noBsTextWithGenerator,
   normalizeNoBsText,
 } from "../../src/llm/no-bs";
+
+function readFixture(name: string): string {
+  return readFileSync(join(process.cwd(), "tests", "fixtures", name), "utf8");
+}
+
+function firstWords(text: string, count: number): string {
+  return text.trim().split(/\s+/).slice(0, count).join(" ");
+}
 
 describe("no-bs llm", () => {
   it("builds prompt with same-language and no-new-facts contract", () => {
@@ -177,10 +187,40 @@ describe("no-bs llm", () => {
         },
         async () => ({
           object: {
-            cleaned_text: "Black Sabbath was an influential heavy metal band from Birmingham.",
+            cleaned_text: firstWords(source, 18),
           },
         })
       )
     ).rejects.toThrow("content preservation check failed");
+  });
+
+  it("fails deterministically on large-fixture truncation (plaintext, structured, pdf-derived)", async () => {
+    const fixtures = [
+      "no-bs-large-plaintext.txt",
+      "no-bs-large-structured.md",
+      "no-bs-large-pdf-derived.txt",
+    ] as const;
+
+    for (const fixture of fixtures) {
+      const source = readFixture(fixture);
+
+      await expect(
+        noBsTextWithGenerator(
+          {
+            provider: "openai",
+            model: "gpt-4o-mini",
+            apiKey: "test",
+            input: source,
+            timeoutMs: 1000,
+            maxRetries: 0,
+          },
+          async () => ({
+            object: {
+              cleaned_text: firstWords(source, 24),
+            },
+          })
+        )
+      ).rejects.toThrow("content preservation check failed");
+    }
   });
 });

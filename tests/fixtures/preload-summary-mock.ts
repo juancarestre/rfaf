@@ -65,6 +65,10 @@ const mockedFetch = Object.assign(
       );
     }
 
+    if (scenario === "length-mismatch") {
+      return buildResponseSummary("Too short.");
+    }
+
     return buildResponseSummary("Resumen en espanol que respeta el idioma original.");
   },
   {

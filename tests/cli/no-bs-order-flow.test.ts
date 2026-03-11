@@ -118,4 +118,34 @@ describe("no-bs + summary ordering", () => {
       "tokenize:TRANSLATED TEXT",
     ]);
   });
+
+  it("does not execute summary when no-bs fails", async () => {
+    let summaryCalls = 0;
+
+    await expect(
+      buildReadingPipeline(
+        {
+          documentContent: "ORIGINAL TEXT",
+          sourceLabel: "stdin",
+          noBsOption: { enabled: true },
+          summaryOption: { enabled: true, preset: "medium" },
+          mode: "rsvp",
+        },
+        {
+          noBsBefore: async () => {
+            throw new Error("No-BS failed [schema]: content preservation check failed");
+          },
+          summarizeBefore: async () => {
+            summaryCalls += 1;
+            return {
+              readingContent: "SHOULD NOT RUN",
+              sourceLabel: "stdin (summary:medium)",
+            };
+          },
+        }
+      )
+    ).rejects.toThrow("No-BS failed");
+
+    expect(summaryCalls).toBe(0);
+  });
 });

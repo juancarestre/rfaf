@@ -3,8 +3,13 @@ import {
   SummaryResponseSchema,
   buildSummaryPrompt,
   normalizeSummaryText,
+  resolveSummaryLengthContract,
   summarizeTextWithGenerator,
 } from "../../src/llm/summarize";
+
+function makeWordSequence(count: number): string {
+  return Array.from({ length: count }, (_, index) => `word${index + 1}`).join(" ");
+}
 
 describe("summarize helpers", () => {
   it("builds preset-specific prompt guidance", () => {
@@ -13,7 +18,32 @@ describe("summarize helpers", () => {
 
     expect(shortPrompt).toContain("short");
     expect(longPrompt).toContain("long");
+    expect(shortPrompt).toContain("Target");
     expect(shortPrompt).not.toBe(longPrompt);
+  });
+
+  it("uses near-original bounds for short inputs across all presets", () => {
+    const shortBounds = resolveSummaryLengthContract(120, "short");
+    const mediumBounds = resolveSummaryLengthContract(120, "medium");
+    const longBounds = resolveSummaryLengthContract(120, "long");
+
+    expect(shortBounds).toEqual({ minimumWords: 84, maximumWords: 120 });
+    expect(mediumBounds).toEqual({ minimumWords: 84, maximumWords: 120 });
+    expect(longBounds).toEqual({ minimumWords: 84, maximumWords: 120 });
+  });
+
+  it("keeps monotonic proportional bounds for long inputs", () => {
+    const shortBounds = resolveSummaryLengthContract(200, "short");
+    const mediumBounds = resolveSummaryLengthContract(200, "medium");
+    const longBounds = resolveSummaryLengthContract(200, "long");
+
+    expect(shortBounds.minimumWords).toBeLessThanOrEqual(mediumBounds.minimumWords);
+    expect(mediumBounds.minimumWords).toBeLessThanOrEqual(longBounds.minimumWords);
+    expect(shortBounds.maximumWords).toBeLessThanOrEqual(mediumBounds.maximumWords);
+    expect(mediumBounds.maximumWords).toBeLessThanOrEqual(longBounds.maximumWords);
+    expect(shortBounds).toEqual({ minimumWords: 24, maximumWords: 44 });
+    expect(mediumBounds).toEqual({ minimumWords: 44, maximumWords: 76 });
+    expect(longBounds).toEqual({ minimumWords: 76, maximumWords: 120 });
   });
 
   it("includes explicit language-preservation and no-translation contract", () => {
@@ -159,10 +189,12 @@ describe("summarize helpers", () => {
         timeoutMs: 500,
         maxRetries: 1,
       },
-      async () => ({ object: { summary: "This is an English summary." } })
+      async () => ({
+        object: { summary: "This is an English summary about architecture and testing." },
+      })
     );
 
-    expect(summary).toBe("This is an English summary.");
+    expect(summary).toBe("This is an English summary about architecture and testing.");
   });
 
   it("fails deterministically after retry exhaustion on repeated language mismatch", async () => {
@@ -187,5 +219,56 @@ describe("summarize helpers", () => {
     ).rejects.toThrow("language preservation check failed");
 
     expect(attempts).toBe(2);
+  });
+
+  it("fails closed when summary output violates proportional bounds", async () => {
+    await expect(
+      summarizeTextWithGenerator(
+        {
+          provider: "openai",
+          model: "gpt-5-mini",
+          apiKey: "test",
+          preset: "short",
+          input: makeWordSequence(200),
+          timeoutMs: 500,
+          maxRetries: 0,
+        },
+        async () => ({ object: { summary: makeWordSequence(10) } })
+      )
+    ).rejects.toThrow("summary length check failed");
+  });
+
+  it("accepts output inside proportional bounds for long-input short preset", async () => {
+    const summary = await summarizeTextWithGenerator(
+      {
+        provider: "openai",
+        model: "gpt-5-mini",
+        apiKey: "test",
+        preset: "short",
+        input: makeWordSequence(200),
+        timeoutMs: 500,
+        maxRetries: 0,
+      },
+      async () => ({ object: { summary: makeWordSequence(30) } })
+    );
+
+    expect(summary.split(/\s+/).length).toBe(30);
+  });
+
+  it("accepts near-original short-input output", async () => {
+    const summary = await summarizeTextWithGenerator(
+      {
+        provider: "openai",
+        model: "gpt-5-mini",
+        apiKey: "test",
+        preset: "long",
+        input: makeWordSequence(100),
+        timeoutMs: 500,
+        maxRetries: 0,
+      },
+      async () => ({ object: { summary: makeWordSequence(80) } })
+    );
+
+    expect(summary.split(/\s+/).length).toBe(80);
   });
 });

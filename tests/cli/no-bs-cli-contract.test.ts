@@ -72,6 +72,67 @@ describe("no-bs CLI contract", () => {
     expect(result.stderr).toContain("language preservation check failed");
   });
 
+  it("blocks summary stage when --no-bs fails", () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "rfaf-no-bs-summary-gate-"));
+    const rfafDir = join(homeDir, ".rfaf");
+    mkdirSync(rfafDir, { recursive: true });
+    writeFileSync(
+      join(rfafDir, "config.yaml"),
+      [
+        "llm:",
+        "  provider: openai",
+        "  model: gpt-4o-mini",
+        "defaults:",
+        "  timeout_ms: 5000",
+        "  max_retries: 0",
+      ].join("\n")
+    );
+
+    const result = runCli(["--no-bs", "--summary=short", "tests/fixtures/sample-ja.txt"], {
+      preloadPath: "./tests/fixtures/preload-no-bs-mock.ts",
+      env: {
+        HOME: homeDir,
+        OPENAI_API_KEY: "dummy",
+        RFAF_NO_BS_MOCK_SCENARIO: "language-mismatch",
+      },
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("[error] no-bs failed");
+    expect(result.stderr).not.toContain("summarizing (");
+    expect(result.stderr).not.toContain("summary ready; starting RSVP");
+  });
+
+  it("fails closed on large-input truncation with typed content-preservation error", () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "rfaf-no-bs-truncation-contract-"));
+    const rfafDir = join(homeDir, ".rfaf");
+    mkdirSync(rfafDir, { recursive: true });
+    writeFileSync(
+      join(rfafDir, "config.yaml"),
+      [
+        "llm:",
+        "  provider: openai",
+        "  model: gpt-4o-mini",
+        "defaults:",
+        "  timeout_ms: 5000",
+        "  max_retries: 0",
+      ].join("\n")
+    );
+
+    const result = runCli(["--no-bs", "tests/fixtures/no-bs-large-plaintext.txt"], {
+      preloadPath: "./tests/fixtures/preload-no-bs-mock.ts",
+      env: {
+        HOME: homeDir,
+        OPENAI_API_KEY: "dummy",
+        RFAF_NO_BS_MOCK_SCENARIO: "content-truncation",
+      },
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("No-BS failed [schema]");
+    expect(result.stderr).toContain("content preservation check failed");
+  });
+
   it("fails closed for valued --no-bs form", () => {
     const result = runCli(["--no-bs=wat", "tests/fixtures/sample.txt"]);
 

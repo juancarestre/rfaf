@@ -6,11 +6,19 @@ import { z } from "zod";
 import { SummarizeRuntimeError } from "../cli/errors";
 import type { SummaryPreset } from "../cli/summary-option";
 import type { LLMProvider } from "../config/llm-config";
+import { countWords } from "../ingest/metrics";
 import { assertInputWithinLimit } from "../ingest/constants";
 
 export const MAX_SUMMARY_BYTES = 512 * 1024;
 
 const LANGUAGE_PRESERVATION_FAILURE_REASON = "language preservation check failed";
+const SUMMARY_LENGTH_FAILURE_REASON = "summary length check failed";
+const SHORT_INPUT_WORD_THRESHOLD = 120;
+
+interface SummaryLengthContract {
+  minimumWords: number;
+  maximumWords: number;
+}
 
 const ENGLISH_MARKER_WORDS = new Set([
   "a",
@@ -101,13 +109,44 @@ export type StructuredGenerator = (input: {
   abortSignal: AbortSignal;
 }) => Promise<{ object: { summary: string } }>;
 
+export function resolveSummaryLengthContract(
+  sourceWordCount: number,
+  preset: SummaryPreset
+): SummaryLengthContract {
+  if (sourceWordCount <= SHORT_INPUT_WORD_THRESHOLD) {
+    return {
+      minimumWords: Math.max(1, Math.ceil(sourceWordCount * 0.7)),
+      maximumWords: Math.max(1, sourceWordCount),
+    };
+  }
+
+  if (preset === "short") {
+    return {
+      minimumWords: Math.max(1, Math.ceil(sourceWordCount * 0.12)),
+      maximumWords: Math.max(1, Math.floor(sourceWordCount * 0.22)),
+    };
+  }
+
+  if (preset === "medium") {
+    return {
+      minimumWords: Math.max(1, Math.ceil(sourceWordCount * 0.22)),
+      maximumWords: Math.max(1, Math.floor(sourceWordCount * 0.38)),
+    };
+  }
+
+  return {
+    minimumWords: Math.max(1, Math.ceil(sourceWordCount * 0.38)),
+    maximumWords: Math.max(1, Math.floor(sourceWordCount * 0.6)),
+  };
+}
+
+function summaryLengthTargetHint(sourceWordCount: number, preset: SummaryPreset): string {
+  const contract = resolveSummaryLengthContract(sourceWordCount, preset);
+  return `Target ${contract.minimumWords}-${contract.maximumWords} words based on source length (${sourceWordCount} words).`;
+}
+
 export function buildSummaryPrompt(input: string, preset: SummaryPreset): string {
-  const targetGuidance =
-    preset === "short"
-      ? "Target approximately 4-8 concise sentences."
-      : preset === "medium"
-        ? "Target approximately 8-14 concise sentences."
-        : "Target approximately 14-22 concise sentences with useful details.";
+  const sourceWordCount = countWords(input);
 
   return [
     "You summarize text for speed reading.",
@@ -116,7 +155,7 @@ export function buildSummaryPrompt(input: string, preset: SummaryPreset): string
     "Return the summary in the same language as the input text.",
     "Do not translate unless explicitly requested by the user (for example via --translate-to).",
     "Avoid bullet points, markdown, and headings.",
-    targetGuidance,
+    summaryLengthTargetHint(sourceWordCount, preset),
     "Text to summarize:",
     input,
   ].join("\n\n");
@@ -186,6 +225,15 @@ function violatesLanguagePreservation(source: string, summary: string): boolean 
 function isLanguagePreservationFailure(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.toLowerCase().includes(LANGUAGE_PRESERVATION_FAILURE_REASON);
+}
+
+function violatesSummaryLengthContract(
+  sourceWordCount: number,
+  summaryWordCount: number,
+  preset: SummaryPreset
+): boolean {
+  const contract = resolveSummaryLengthContract(sourceWordCount, preset);
+  return summaryWordCount < contract.minimumWords || summaryWordCount > contract.maximumWords;
 }
 
 function createModel(provider: LLMProvider, modelName: string, apiKey: string): LanguageModel {
@@ -262,6 +310,13 @@ function classifyRuntimeError(error: unknown): SummarizeRuntimeError {
   if (lower.includes(LANGUAGE_PRESERVATION_FAILURE_REASON)) {
     return new SummarizeRuntimeError(
       "Summarization failed [schema]: language preservation check failed; summary language differs from source text.",
+      "schema"
+    );
+  }
+
+  if (lower.includes(SUMMARY_LENGTH_FAILURE_REASON)) {
+    return new SummarizeRuntimeError(
+      "Summarization failed [schema]: summary length check failed; output is outside the preset proportional bounds.",
       "schema"
     );
   }
@@ -349,6 +404,16 @@ export async function summarizeTextWithGenerator(
       if (violatesLanguagePreservation(input.input, normalized)) {
         throw new SummarizeRuntimeError(
           "Summarization failed [schema]: language preservation check failed; summary language differs from source text.",
+          "schema"
+        );
+      }
+
+      const sourceWordCount = countWords(input.input);
+      const summaryWordCount = countWords(normalized);
+      if (violatesSummaryLengthContract(sourceWordCount, summaryWordCount, input.preset)) {
+        const contract = resolveSummaryLengthContract(sourceWordCount, input.preset);
+        throw new SummarizeRuntimeError(
+          `Summarization failed [schema]: ${SUMMARY_LENGTH_FAILURE_REASON}; expected ${contract.minimumWords}-${contract.maximumWords} words for preset ${input.preset}, got ${summaryWordCount}.`,
           "schema"
         );
       }
